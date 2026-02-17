@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RPK NEXUS | Portal Central</title>
+    <link rel="stylesheet" href="/assets/style_nexus.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <div class="logo-container">
+                <h1>RPK<span>NEXUS</span></h1>
+            </div>
+            <div class="status-badge">
+                <div class="dot"></div>
+                <span>DATABASE ONLINE</span>
+            </div>
+        </header>
+
+        <main>
+            <!-- KPIs Unificados -->
+            <div class="kpi-grid">
+                <div class="card">
+                    <h3>Stock Snapshot</h3>
+                    <div class="value" id="stock-val">---</div>
+                    <div class="label">Referencias en local</div>
+                </div>
+                <div class="card">
+                    <h3>Saturación Media</h3>
+                    <div class="value" id="sat-val">74%</div>
+                    <div class="label">Centros de Trabajo</div>
+                </div>
+                <div class="card">
+                    <h3>Cobertura Real</h3>
+                    <div class="value">12.4</div>
+                    <div class="label">Días de producción</div>
+                </div>
+            </div>
+
+            <!-- Módulos Nexus -->
+            <div class="modules-section">
+                <div class="module-box">
+                    <h2>📦 Dashboard de Stock</h2>
+                    <p>Acceso al análisis detallado de existencias, ubicaciones y obsoletos.</p>
+                    <a href="https://example.com/stock" class="btn-launch" target="_blank">Abrir Módulo</a>
+                </div>
+                <div class="module-box">
+                    <h2>⏳ Dashboard de Tiempos</h2>
+                    <p>Visualización de cargas de trabajo, OEE y saturación por máquina.</p>
+                    <a href="https://example.com/tiempos" class="btn-launch" target="_blank">Abrir Módulo</a>
+                </div>
+            </div>
+        </main>
+
+        <!-- Gemini Assistant Popup -->
+        <div class="chat-trigger" onclick="toggleChat()">
+            🤖
+        </div>
+
+        <div class="chat-popup" id="chatPopup">
+            <div class="chat-header">
+                <strong>Nexus Assistant</strong>
+                <span style="cursor:pointer" onclick="toggleChat()">✕</span>
+            </div>
+            <div class="chat-body" id="chatBody">
+                <p style="color:var(--text-muted)">Hola Ismael, soy el asistente NEXUS. ¿En qué puedo ayudarte hoy?</p>
+            </div>
+            <div class="chat-input-area">
+                <input type="text" class="chat-input" id="chatInput" placeholder="Pregunta algo..." onkeypress="handleKey(event)">
+                <button class="btn-send" onclick="sendMessage()">➤</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Cargar Datos Iniciales
+        fetch('/api/v1/status')
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('stock-val').innerText = data.records.stock;
+            });
+
+        function toggleChat() {
+            document.getElementById('chatPopup').classList.toggle('active');
+        }
+
+        function handleKey(e) {
+            if(e.key === 'Enter') sendMessage();
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const body = document.getElementById('chatBody');
+            const text = input.value.trim();
+            if(!text) return;
+
+            // User msg
+            body.innerHTML += `<p style="margin-top:10px"><strong>Tú:</strong> ${text}</p>`;
+            input.value = '';
+
+            // API Call
+            const res = await fetch('/api/v1/chat', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({text: text})
+            });
+            const data = await res.json();
+
+            // Nexus response
+            body.innerHTML += `<p style="margin-top:10px; color:var(--rpk-red)"><strong>Nexus:</strong> ${data.response}</p>`;
+            body.scrollTop = body.scrollHeight;
+        }
+    </script>
+</body>
+</html>
