@@ -681,27 +681,32 @@ _tiempos_cache_time = None
 
 def load_tiempos_data():
     global _tiempos_cache, _tiempos_cache_time
-    if _tiempos_cache is None or _tiempos_cache_time is None or (datetime.now() - _tiempos_cache_time).seconds > 60:
+    now = datetime.now()
+    if _tiempos_cache is None or _tiempos_cache_time is None or (now - _tiempos_cache_time).seconds > 60:
         if not EXCEL_TIEMPOS.exists():
             print(f"[ERROR] No existe el archivo {EXCEL_TIEMPOS}")
             return None, None, None
         try:
-            df_centros = pd.read_excel(EXCEL_TIEMPOS, sheet_name='Datos_Centros').fillna(0)
-            df_rankings = pd.read_excel(EXCEL_TIEMPOS, sheet_name='Rankings').fillna(0)
-            try:
-                df_ca = pd.read_excel(EXCEL_TIEMPOS, sheet_name='Datos_Centro_Articulo').fillna(0)
-            except:
-                df_ca = pd.DataFrame(columns=['Fecha', 'Centro', 'Articulo', 'Horas'])
+            # Forzar motor openpyxl por si hay problemas de compatibilidad
+            with pd.ExcelFile(EXCEL_TIEMPOS, engine='openpyxl') as xl:
+                df_centros = xl.parse('Datos_Centros').fillna(0)
+                df_rankings = xl.parse('Rankings').fillna(0)
+                try:
+                    df_ca = xl.parse('Datos_Centro_Articulo').fillna(0)
+                except:
+                    print("[WARN] Sheet Datos_Centro_Articulo no encontrada, usando vacía")
+                    df_ca = pd.DataFrame(columns=['Fecha', 'Centro', 'Articulo', 'OF', 'Horas'])
             
             for df in [df_centros, df_rankings, df_ca]:
                 if not df.empty and 'Fecha' in df.columns:
                     df['Fecha'] = pd.to_datetime(df['Fecha']).dt.strftime('%Y-%m-%d')
             
             _tiempos_cache = (df_centros, df_rankings, df_ca)
-            _tiempos_cache_time = datetime.now()
+            _tiempos_cache_time = now
+            print(f"[DEBUG] Tiempos re-cargados: {len(df_centros)} centros, {len(df_ca)} articulos")
         except Exception as e:
-            print(f"[ERROR] Cargando Tiempos: {e}")
-            return _tiempos_cache if _tiempos_cache else (None, None, None)
+            print(f"[ERROR] Cargando Tiempos: {str(e)}")
+            return (_tiempos_cache if _tiempos_cache else (None, None, None))
     return _tiempos_cache
 
 @app.get("/api/fechas")
@@ -768,17 +773,41 @@ async def get_tiempos_centro_detalle(centro_id: str, fecha_inicio: Optional[str]
 @app.get("/api/centro/{centro_id}/articulos/mes/{mes}")
 async def get_tiempos_breakdown(centro_id: str, mes: str):
     data = load_tiempos_data()
+    if not data or data[2] is None:
+        return {"articulos": [], "error": "No se pudieron cargar los datos del Excel."}
+        
     _, _, df_ca = data
     cids = [c.strip() for c in centro_id.split(',')]
     df_f = df_ca[df_ca['Centro'].astype(str).isin(cids)].copy()
+    
+    if df_f.empty:
+        return {"articulos": []}
+        
     df_f['Mes'] = pd.to_datetime(df_f['Fecha']).dt.strftime('%Y-%m')
     df_f = df_f[df_f['Mes'] == mes]
     
-    if df_f.empty: return {"articulos": []}
+    if df_f.empty:
+        return {"articulos": []}
     
-    res = df_f.groupby('Articulo').agg(horas=('Horas', 'mean'), dias=('Fecha', 'nunique')).reset_index().sort_values('horas', ascending=False)
+    # Agrupar por Articulo y OF (si existe)
+    group_cols = ['Articulo']
+    if 'OF' in df_f.columns:
+        group_cols.append('OF')
+    
+    res = df_f.groupby(group_cols).agg(
+        horas=('Horas', 'sum'), 
+        dias=('Fecha', 'nunique')
+    ).reset_index().sort_values('horas', ascending=False)
+    
     total = res['horas'].sum()
     res['porcentaje'] = (res['horas'] / total * 100).round(2) if total > 0 else 0
+    
+    # Asegurar que el campo se llame 'of' para el JS
+    if 'OF' in res.columns:
+        res = res.rename(columns={'OF': 'of'})
+    else:
+        res['of'] = '-'
+        
     return {"mes": mes, "total_horas": round(total, 2), "articulos": res.to_dict(orient='records')}
 
 # --- ENDPOINTS EXISTENTES (ESCENARIOS Y CHAT) ---
