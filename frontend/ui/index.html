@@ -36,7 +36,7 @@
                 </div>
                 <div class="card">
                     <h3>Cobertura Real</h3>
-                    <div class="value">12.4</div>
+                    <div class="value" id="cob-val">12.4</div>
                     <div class="label">Días de producción</div>
                 </div>
             </div>
@@ -83,11 +83,17 @@
     </div>
 
     <script>
-        // Cargar Datos Iniciales
-        fetch('/api/v1/status')
+        // Cargar Datos Iniciales (Hub Stats)
+        fetch('/api/v1/hub_stats')
             .then(r => r.json())
             .then(data => {
-                document.getElementById('stock-val').innerText = data.records.stock;
+                if (data.error) return;
+                // 1. Stock (Pzs)
+                document.getElementById('stock-val').innerText = data.stock.total.toLocaleString();
+                // 2. Saturación Media
+                document.getElementById('sat-val').innerText = data.saturation + '%';
+                // 3. Cobertura
+                document.getElementById('cob-val').innerText = data.cobertura;
             });
 
         function toggleChat() {

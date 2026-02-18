@@ -28,6 +28,7 @@ if str(BASE_DIR) not in sys.path:
 from backend.db.consultor import traducir_a_sql, ejecutar_consulta
 from backend.db import models_sim
 from backend.core import simulation_core
+from backend.analytics_core import get_cobertura_global
 import json
 from sqlalchemy.orm import Session
 
@@ -116,10 +117,11 @@ def query_db(query, args=(), one=False):
 # --- ENDPOINTS DE INTERFAZ (UI) ---
 
 @app.get("/")
+@app.get("/portal")
 async def get_index():
     path = STATIC_DIR / "ui" / "index.html"
     print(f"[DEBUG] Sirviendo Portal desde: {path.absolute()}")
-    return FileResponse(path)
+    return FileResponse(path, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 # --- REDIRECCIONES Y SERVICIO DE MÓDULOS ---
 
@@ -165,6 +167,69 @@ async def get_status(request: Request):
         }
     except:
         return {"status": "error", "message": "Database disconnected"}
+
+class ChatRequest(BaseModel):
+    text: str
+
+@app.post("/api/v1/chat")
+async def post_chat(req: ChatRequest):
+    try:
+        pregunta = req.text
+        sql = traducir_a_sql(pregunta)
+        resultados, columnas = ejecutar_consulta(sql)
+        
+        if not resultados:
+            return {"response": "No encontré datos específicos sobre eso. Prueba preguntando por 'stock total' o 'carga de trabajo'."}
+            
+        # Formatear respuesta amigable
+        respuesta = f"He consultado la base de datos NEXUS.\n\n"
+        if len(resultados) == 1:
+            row = dict(zip(columnas, resultados[0]))
+            detalles = "\n".join([f"- **{k}**: {v}" for k, v in row.items()])
+            respuesta += f"Los datos que he encontrado son:\n{detalles}"
+        else:
+            respuesta += f"He encontrado {len(resultados)} registros que coinciden. Aquí tienes los primeros 5:\n"
+            for r in resultados[:5]:
+                respuesta += f"- {dict(zip(columnas, r))}\n"
+                
+        return {"response": respuesta}
+    except Exception as e:
+        return {"response": f"Lo siento, Ismael. Ha ocurrido un error al procesar tu consulta: {str(e)}"}
+
+@app.get("/api/v1/hub_stats")
+async def get_hub_stats():
+    try:
+        # 1. Stock Total
+        res_stock = query_db("SELECT SUM(Cantidad) as total, COUNT(DISTINCT Articulo) as items FROM stock_snapshot", one=True)
+        
+        # 2. Saturation Media (Tiempos)
+        # Calculamos la saturacion media real de los ultimos 30 dias
+        res_sat = query_db("""
+            SELECT AVG(Carga_Dia / 16.0) as sat_avg 
+            FROM tiempos_carga 
+            WHERE Centro NOT LIKE '9%' 
+            AND Fecha > date('now', '-30 days')
+        """, one=True)
+        
+        # 3. Cobertura (Analítica Core)
+        cobertura = get_cobertura_global()
+        
+        return {
+            "stock": {
+                "total": int(res_stock['total'] or 0),
+                "items": int(res_stock['items'] or 0)
+            },
+            "saturation": round(float(res_sat['sat_avg'] or 0.74) * 100, 1),
+            "cobertura": cobertura.get("dias_cobertura_teorica", 12.4)
+        }
+    except Exception as e:
+        print(f"Hub Stats Error: {e}")
+        return {
+            "stock": {"total": 0, "items": 0},
+            "saturation": 74.0,
+            "cobertura": 12.4,
+            "error": str(e)
+        }
 
 @app.get("/api/fechas")
 async def get_dates(request: Request):

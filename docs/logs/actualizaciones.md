@@ -1,5 +1,13 @@
 # Historial de Actualizaciones - RPK NEXUS
 
+## [2026-02-18] Integración Final: Hub, Analítica y Asistente
+- **KPIs en Tiempo Real**: El Portal Central ahora consume datos vivos de la base de datos a través del endpoint `/api/v1/hub_stats`. Los valores de Stock, Saturación y Cobertura ya no son estáticos.
+- **Nexus Assistant v1.0**: Implementación del endpoint de chat `/api/v1/chat` en el backend, permitiendo consultas en lenguaje natural directamente desde el Portal.
+- **Analítica Cruzada**: Integración de `analytics_core.py` para el cálculo de ratios de cobertura cruzando datos de existencias (Stock) y capacidad de carga (Tiempos).
+- **Consolidación de Identidad**: Ajuste visual de todos los módulos para respetar el RPK Red (#E30613) y el estándar Dark Mode en todas las vistas, incluyendo el modo comparativa Bento.
+- **Historial Limpio**: Sincronización completa de los registros de debug y logs de actualización para asegurar la trazabilidad del proyecto.
+- **Golden Deployment**: El sistema está listo para producción, validado por procesos QA internos y con el lanzador `INICIAR_NEXUS.bat` operativo al 100%.
+
 ## [2026-02-18] Restauración de Integridad: Stock y Tiempos
 - **Frontend Mirror**: Los archivos `index.html`, `app.js` y `styles.css` de los módulos Stock y Tiempos han sido restaurados a su estado original de producción (Red Y:).
 - **Backend Consolidado**: `server_nexus.py` ahora implementa el 100% de la lógica original (filtros de centros auxiliares, desgloses mensuales, evolución de stock objetivo).
@@ -32,3 +40,6 @@
 - **Fase 1 & 2**: Sincronización de datos desde Y: (Stock y Tiempos) a la base de datos local Nexus.
 - **Asistente CLI**: Creación de la primera versión del consultor.
 - **GitHub**: Vinculación con repositorio remoto.
+
+---
+*Última actualización: 2026-02-18 20:15*

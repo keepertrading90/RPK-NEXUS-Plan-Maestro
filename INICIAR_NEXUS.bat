@@ -30,7 +30,7 @@ echo.
 for /f "tokens=5" %%a in ('netstat -ano ^| findstr :8000 ^| findstr LISTENING') do taskkill /f /pid %%a >nul 2>&1
 
 :: Abrir el navegador justo después de lanzar el servidor
-start http://localhost:8000
+start http://localhost:8000/portal
 
 :: Iniciar el servidor en la ventana actual (esto bloqueará el BAT para mantener el servicio)
 echo [3/3] PANEL ACTIVO en http://localhost:8000
