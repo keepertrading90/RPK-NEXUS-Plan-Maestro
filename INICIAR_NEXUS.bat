@@ -11,12 +11,12 @@ echo ============================================================
 echo.
 
 :: 1. Sincronizar datos (Rápido)
-echo [1/3] Sincronizando datos de produccion (Y: -> Local)...
+echo [1/3] Sincronizando datos de produccion (Red -> Local)...
 ".\_SISTEMA\runtime_python\python.exe" scripts/sync_nexus.py
 
 if %ERRORLEVEL% NEQ 0 (
     echo.
-    echo ⚠️ AVISO: Error en sincronizacion. Verifique conexion a Y:
+    echo ⚠️ AVISO: Error en sincronizacion. Verifique conexion a la Red RPK.
     echo Se intentara abrir el panel con los ultimos datos locales.
     echo.
 )

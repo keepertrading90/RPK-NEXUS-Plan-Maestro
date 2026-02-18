@@ -14,9 +14,9 @@ from sqlalchemy import create_engine
 LOCAL_BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOCAL_DB = os.path.join(LOCAL_BASE, "backend", "db", "rpk_industrial.db")
 
-# Remotos (Orígenes en Y:)
-REMOTE_STOCK_DB = r"Y:\Supply Chain\PLAN PRODUCCION\PANEL\_PROYECTOS\DASHBOARD_STOCK\backend\db\rpk_industrial.db"
-REMOTE_TIME_DB = r"Y:\Supply Chain\PLAN PRODUCCION\PANEL\_PROYECTOS\DASHBOARD_TIEMPOS\backend\db\rpk_industrial.db"
+# Remotos (Orígenes en Ruta UNC)
+REMOTE_STOCK_DB = r"\\RPK4TGN\ofimatica\Supply Chain\PLAN PRODUCCION\PANEL\_PROYECTOS\DASHBOARD_STOCK\backend\db\rpk_industrial.db"
+REMOTE_TIME_DB = r"\\RPK4TGN\ofimatica\Supply Chain\PLAN PRODUCCION\PANEL\_PROYECTOS\DASHBOARD_TIEMPOS\backend\db\rpk_industrial.db"
 
 def sync_data():
     print("🔄 Iniciando Sincronización Local RPK NEXUS...")
@@ -29,7 +29,7 @@ def sync_data():
 
     # 1. Sincronizar Stock
     if os.path.exists(REMOTE_STOCK_DB):
-        print("📊 Sincronizando datos de STOCK desde Y:...")
+        print("📊 Sincronizando datos de STOCK desde Red...")
         try:
             engine_rem_stock = create_engine(f"sqlite:///{REMOTE_STOCK_DB.replace(os.sep, '/')}")
             df_stock = pd.read_sql("SELECT * FROM stock_snapshot", engine_rem_stock)
@@ -42,7 +42,7 @@ def sync_data():
 
     # 2. Sincronizar Tiempos
     if os.path.exists(REMOTE_TIME_DB):
-        print("⏳ Sincronizando datos de TIEMPOS desde Y:...")
+        print("⏳ Sincronizando datos de TIEMPOS desde Red...")
         try:
             engine_rem_time = create_engine(f"sqlite:///{REMOTE_TIME_DB.replace(os.sep, '/')}")
             df_time = pd.read_sql("SELECT * FROM tiempos_carga", engine_rem_time)

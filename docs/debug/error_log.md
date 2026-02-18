@@ -1,5 +1,10 @@
 # Registro de Errores y Debugging - RPK NEXUS
 
+## [2026-02-18 09:58] Error de Conexión (Unidad Y: No Disponible)
+- **Síntoma**: Los scripts de sincronización fallaban al no encontrar el disco mapeado `Y:`.
+- **Causa**: Variabilidad en el mapeo de red de las máquinas cliente.
+- **Solución**: Se han implementado rutas UNC directas (`\\RPK4TGN\...`) en todos los archivos de configuración y scripts.
+
 ## [2026-02-18 09:52] ERR_CONNECTION_REFUSED
 - **Síntoma**: Al iniciar la aplicación, el navegador mostraba "No se puede obtener acceso a esta página".
 - **Causa**: El servidor FastAPI no había terminado de arrancar o el lanzador .bat estaba bloqueado por la ejecución del Consultor CLI antes de subir el server.

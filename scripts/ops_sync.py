@@ -1,5 +1,5 @@
 import os, sys, subprocess
-PYTHON_PATH = r"Y:\Supply Chain\PLAN PRODUCCION\PANEL\_SISTEMA\runtime_python\python.exe"
+PYTHON_PATH = r"\\RPK4TGN\ofimatica\Supply Chain\PLAN PRODUCCION\PANEL\_SISTEMA\runtime_python\python.exe"
 def main():
     if len(sys.argv) < 2:
         print("⚠️ USO: ops_sync.py 'mensaje'")
