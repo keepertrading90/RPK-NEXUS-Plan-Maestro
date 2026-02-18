@@ -128,28 +128,23 @@ async def get_index():
 @app.get("/mod/{mod_name}")
 @app.get("/mod/{mod_name}/")
 async def get_module_index(mod_name: str, request: Request):
-    # 1. Si es un archivo conocido (logo, favicon, etc), no tratar como módulo
-    if mod_name.lower().endswith(('.png', '.jpg', '.ico', '.css', '.js', '.svg')):
-        # Intentar buscarlo en assets o módulos
+    # 1. Si es un archivo directo (con extensión), servirlo si existe
+    if "." in mod_name:
         for p in [STATIC_DIR / "assets" / mod_name, STATIC_DIR / "modules" / mod_name]:
             if p.exists(): return FileResponse(p)
         raise HTTPException(status_code=404)
 
-    # Verificar si es un directorio de módulo válido
+    # 2. Verificar directorio
     mod_path = STATIC_DIR / "modules" / mod_name
     if not mod_path.is_dir():
-        print(f"[DEBUG] {mod_name} no es un directorio, omitiendo get_module_index")
         raise HTTPException(status_code=404)
 
-    # 2. Forzar barra al final para directorios
+    # 3. FORZAR barra al final (Crucial para CSS relativo)
     if not request.url.path.endswith("/"):
         return RedirectResponse(url=f"/mod/{mod_name}/")
     
-    # 3. Servir index.html (prefiriendo subcarpeta ui si existe)
-    path = mod_path / "ui" / "index.html"
-    if not path.exists():
-        path = mod_path / "index.html"
-    
+    # 4. Servir index.html de la raíz del módulo
+    path = mod_path / "index.html"
     if not path.exists():
         return JSONResponse({"error": f"Modulo {mod_name} sin index.html"}, status_code=404)
             
@@ -159,7 +154,6 @@ async def get_module_index(mod_name: str, request: Request):
 # Montar directorios estáticos
 app.mount("/mod", StaticFiles(directory=str(STATIC_DIR / "modules")), name="modules")
 app.mount("/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="assets")
-app.mount("/ui", StaticFiles(directory=str(STATIC_DIR / "modules" / "tiempos" / "ui")), name="ui_tiempos_legacy")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="legacy_static")
 
 # --- ENDPOINTS DE API - COMPATIBILIDAD Y DATOS ---
