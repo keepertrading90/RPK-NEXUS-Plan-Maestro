@@ -126,27 +126,39 @@ async def get_index():
 # --- REDIRECCIONES Y SERVICIO DE MÓDULOS ---
 
 @app.get("/mod/{mod_name}")
+@app.get("/mod/{mod_name}/")
 async def get_module_index(mod_name: str, request: Request):
+    # Verificar si es un directorio de módulo válido
+    mod_path = STATIC_DIR / "modules" / mod_name
+    if not mod_path.is_dir():
+        # Si no es un directorio, dejar que StaticFiles lo maneje (pero aquí devolvemos 404 para que siga la cadena)
+        # En FastAPI, si una ruta no coincide, sigue buscando. Pero aquí ya coincidió con {mod_name}.
+        # Por tanto, si no es un directorio, redirigimos al mount estático o devolvemos error.
+        print(f"[DEBUG] {mod_name} no es un directorio, omitiendo get_module_index")
+        raise HTTPException(status_code=404)
+
     # Forzar barra al final para que los activos relativos funcionen correctamente
     if not request.url.path.endswith("/"):
-        return RedirectResponse(url=str(request.url).rstrip("/") + "/")
+        return RedirectResponse(url=f"/mod/{mod_name}/")
     
-    # Intentar servir index.html desde la raíz del módulo
-    path = STATIC_DIR / "modules" / mod_name / "index.html"
+    # Intentar servir index.html
+    path = mod_path / "index.html"
     if not path.exists():
-        # Fallback para el simulador si conserva la subcarpeta ui
-        path_ui = STATIC_DIR / "modules" / mod_name / "ui" / "index.html"
+        # Fallback subcarpeta ui
+        path_ui = mod_path / "ui" / "index.html"
         if path_ui.exists():
             path = path_ui
         else:
+            print(f"[ERROR] Modulo {mod_name} no tiene index.html")
             return JSONResponse({"error": f"Modulo {mod_name} no encontrado"}, status_code=404)
             
-    print(f"[DEBUG] Sirviendo modulo {mod_name} desde: {path.absolute()}")
+    print(f"[DEBUG] Sirviendo index de {mod_name} desde: {path}")
     return FileResponse(path, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 # Montar directorios estáticos para los activos de los módulos
 app.mount("/mod", StaticFiles(directory=str(STATIC_DIR / "modules")), name="modules")
 app.mount("/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="assets")
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="legacy_static")
 
 # --- ENDPOINTS DE API - COMPATIBILIDAD Y DATOS ---
 
