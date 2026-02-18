@@ -1,5 +1,12 @@
 # Historial de Actualizaciones - RPK NEXUS
 
+## [2026-02-18] Lanzamiento RPK NEXUS v3.2: Unificación de Módulos
+- **Unificación Total**: Integración de los dashboards de Stock, Tiempos y Simulador de Producción en un solo portal centralizado.
+- **Arquitectura de Parcheo**: Los frontends originales se sirven ahora localmente desde `frontend/modules/` para permitir ajustes de ruta sin tocar los originales de la red.
+- **Endpoints de Compatibilidad**: Implementación en `server_nexus.py` de las rutas de API esperadas por los módulos originales (`/api/summary`, `/api/fechas`, etc.).
+- **Módulo de Simulaciones**: Integración completa del Simulador de Fleje v3 como nueva tarjeta interactiva.
+- **Control de Rutas**: Configuración de montajes estáticos dinámicos para servir activos CSS/JS de múltiples módulos simultáneamente.
+
 ## [2026-02-18] Solución Crítica de Rutas (ModuleNotFoundError)
 - **Corrección de Paquetes**: Se ha configurado la raíz del proyecto dinámicamente en el entorno de Python (`sys.path`) para que el comando `import backend` funcione correctamente.
 - **Estandarización**: Creación de archivos `__init__.py` en todos los directorios del backend para cumplir con los estándares de empaquetado de Python.

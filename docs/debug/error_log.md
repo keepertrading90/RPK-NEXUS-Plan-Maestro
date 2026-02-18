@@ -1,5 +1,10 @@
 # Registro de Errores y Debugging - RPK NEXUS
 
+## [2026-02-18 10:15] CommandNotFoundException: Fallo de Ejecución en Ruta UNC
+- **Síntoma**: El script `ops_sync.py` fallaba al intentar invocarse usando la ruta UNC del runtime remoto (`\\RPK4TGN\...`).
+- **Causa**: Restricciones de seguridad de PowerShell que impiden la ejecución directa de binarios en rutas de red no confiables o no mapeadas.
+- **Solución**: Se ha revertido el uso del ejecutable de red en favor del runtime local `.\_SISTEMA\runtime_python\python.exe`, asegurando consistencia en la ejecución de scripts de mantenimiento.
+
 ## [2026-02-18 10:01] ModuleNotFoundError: No module named 'backend'
 - **Síntoma**: El servidor fallaba al iniciar indicando que no encontraba el módulo 'backend'.
 - **Causa**: Al ejecutar el script directamente desde la raíz, el entorno de ejecución no incluía el directorio base en la ruta de búsqueda de módulos de Python.
