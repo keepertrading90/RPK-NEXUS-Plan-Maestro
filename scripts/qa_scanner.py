@@ -1,10 +1,10 @@
 import os, re, sys, ast
 SCAN_DIRS = ["backend", "frontend"]
 FORBIDDEN_PATTERNS = {
-    r"supabase": "⛔ SEGURIDAD: Referencia a nube prohibida.",
-    r"print\(": "⚠️ DEPURACIÓN: Eliminar 'print'.",
-    r"TODO": "🔵 INCOMPLETO: Tarea pendiente.",
-    r"sk-[a-zA-Z0-9]{20,}": "🔴 SEGURIDAD: API Key expuesta."
+    r"supabase": "ERROR SEGURIDAD: Referencia a nube prohibida.",
+    r"print\(": "WARN DEPURACION: Eliminar 'print'.",
+    r"TODO": "INFO INCOMPLETO: Tarea pendiente.",
+    r"sk-[a-zA-Z0-9]{20,}": "CRITICAL SEGURIDAD: API Key expuesta."
 }
 def check_syntax(file_path):
     try:
@@ -13,12 +13,12 @@ def check_syntax(file_path):
         ast.parse(source)
         return True
     except SyntaxError as e:
-        print(f"💥 ERROR DE SINTAXIS en {file_path}: Linea {e.lineno}")
+        print(f"[ERROR] SINTAXIS en {file_path}: Linea {e.lineno}")
         return False
     except: return True
 
 def run_audit():
-    print("🕵️  INICIANDO QA...")
+    print("[INFO] INICIANDO QA...")
     errors = 0
     for d in SCAN_DIRS:
         if not os.path.exists(d): continue
@@ -28,7 +28,7 @@ def run_audit():
                 if file.endswith(".py") and not check_syntax(path):
                     errors += 1
     if errors > 0: sys.exit(1)
-    print("✅ Código Validado.")
+    print("[OK] Codigo Validado.")
     sys.exit(0)
 if __name__ == "__main__":
     run_audit()
