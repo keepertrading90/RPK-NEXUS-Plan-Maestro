@@ -118,27 +118,33 @@ def query_db(query, args=(), one=False):
 
 @app.get("/")
 async def get_index():
-    return FileResponse(STATIC_DIR / "ui" / "index.html")
-
-@app.get("/mod/stock")
-async def get_stock_mod():
-    return FileResponse(STATIC_DIR / "modules" / "stock" / "index.html")
-
-@app.get("/mod/tiempos")
-async def get_tiempos_mod():
-    path = STATIC_DIR / "modules" / "tiempos" / "index.html"
-    if not path.exists():
-        path = STATIC_DIR / "modules" / "tiempos" / "ui" / "index.html"
+    path = STATIC_DIR / "ui" / "index.html"
+    print(f"[DEBUG] Sirviendo Portal desde: {path.absolute()}")
     return FileResponse(path)
 
-@app.get("/mod/simulador")
-async def get_simulador_mod():
-    path = STATIC_DIR / "modules" / "simulador" / "index.html"
+# --- REDIRECCIONES Y SERVICIO DE MÓDULOS ---
+
+@app.get("/mod/{mod_name}")
+async def get_module_index(mod_name: str, request: Request):
+    # Forzar barra al final para que los activos relativos funcionen correctamente
+    if not request.url.path.endswith("/"):
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=str(request.url).rstrip("/") + "/")
+    
+    # Intentar servir index.html desde la raíz del módulo
+    path = STATIC_DIR / "modules" / mod_name / "index.html"
     if not path.exists():
-        path = STATIC_DIR / "modules" / "simulador" / "ui" / "index.html"
+        # Fallback para el simulador si conserva la subcarpeta ui
+        path_ui = STATIC_DIR / "modules" / mod_name / "ui" / "index.html"
+        if path_ui.exists():
+            path = path_ui
+        else:
+            return JSONResponse({"error": f"Módulo {mod_name} no encontrado"}, status_code=404)
+            
+    print(f"[DEBUG] Sirviendo módulo {mod_name} desde: {path.absolute()}")
     return FileResponse(path)
 
-# Montar directorios estáticos
+# Montar directorios estáticos para los activos de los módulos
 app.mount("/mod", StaticFiles(directory=str(STATIC_DIR / "modules")), name="modules")
 app.mount("/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="assets")
 
@@ -161,7 +167,8 @@ async def redirect_to_mod_with_slash(mod_name: str, request: Request):
 # --- ENDPOINTS DE API - COMPATIBILIDAD Y DATOS ---
 
 @app.get("/api/v1/status")
-async def get_status():
+@app.get("/api/status")
+async def get_status(request: Request):
     try:
         res_stock = query_db("SELECT COUNT(*) as n FROM stock_snapshot", one=True)
         res_tiempos = query_db("SELECT COUNT(*) as n FROM tiempos_carga", one=True)
@@ -171,7 +178,8 @@ async def get_status():
             "records": {
                 "stock": res_stock['n'] if res_stock else 0,
                 "tiempos": res_tiempos['n'] if res_tiempos else 0
-            }
+            },
+            "database": "rpk_industrial.db"
         }
     except:
         return {"status": "error", "message": "Database disconnected"}
@@ -201,39 +209,67 @@ async def get_summary(request: Request, fecha_inicio: str = None, fecha_fin: str
     
     # --- LOGICA DE STOCK ---
     if "mod/stock" in referer:
-        latest_date = query_db("SELECT MAX(Fecha) FROM stock_snapshot", one=True)[0]
+        latest_available_date = query_db("SELECT MAX(Fecha) FROM stock_snapshot", one=True)[0]
+        actual_latest = fecha_fin if fecha_fin else latest_available_date
+        
+        # Filtros para evolución
+        evol_query = "SELECT Fecha, Valor_Total FROM stock_evolucion WHERE 1=1"
+        evol_params = []
+        if fecha_inicio:
+            evol_query += " AND Fecha >= ?"
+            evol_params.append(fecha_inicio)
+        if fecha_fin:
+            evol_query += " AND Fecha <= ?"
+            evol_params.append(fecha_fin)
+        evol_query += " ORDER BY Fecha"
+        
+        evol = query_db(evol_query, tuple(evol_params))
+        
+        # KPIs y Datos Puntuales (usamos la fecha_fin o la última disponible)
         kpis = query_db("""
             SELECT SUM(Valor_Total) as valor_total, 
                    COUNT(DISTINCT Articulo) as num_items, 
                    COUNT(DISTINCT Cliente) as num_clientes 
             FROM stock_snapshot WHERE Fecha = ?
-        """, (latest_date,), one=True)
-        evol = query_db("SELECT Fecha, Valor_Total FROM stock_evolucion ORDER BY Fecha")
+        """, (actual_latest,), one=True)
+        
+        # Si no hay datos para esa fecha, intentamos la última disponible real
+        if not kpis or kpis['valor_total'] is None:
+             actual_latest = latest_available_date
+             kpis = query_db("""
+                SELECT SUM(Valor_Total) as valor_total, 
+                       COUNT(DISTINCT Articulo) as num_items, 
+                       COUNT(DISTINCT Cliente) as num_clientes 
+                FROM stock_snapshot WHERE Fecha = ?
+            """, (actual_latest,), one=True)
+
         top_cust = query_db("""
             SELECT Cliente, SUM(Valor_Total) as Valor_Total 
             FROM stock_snapshot WHERE Fecha = ? 
             GROUP BY Cliente ORDER BY Valor_Total DESC LIMIT 5
-        """, (latest_date,))
+        """, (actual_latest,))
+        
         top_items = query_db("""
-            SELECT Articulo, Descripcion, SUM(Cantidad) as Cantidad, SUM(Valor_Total) as Valor_Total 
+            SELECT Articulo, Descripcion, SUM(Cantidad) as Cantidad, SUM(Valor_Total) as Valor_Total, MAX(Stock_Objetivo) as Stock_Objetivo
             FROM stock_snapshot WHERE Fecha = ? 
             GROUP BY Articulo, Descripcion ORDER BY Valor_Total DESC LIMIT 100
-        """, (latest_date,))
+        """, (actual_latest,))
         
         return {
             "kpis": dict(kpis) if kpis else {"valor_total": 0, "num_items": 0, "num_clientes": 0},
             "evolucion_total": {
-                "fechas": [r['Fecha'] for r in evol],
-                "valores": [r['Valor_Total'] for r in evol]
+                "fechas": [r['Fecha'] for r in evol] if evol else [],
+                "valores": [r['Valor_Total'] for r in evol] if evol else []
             },
-            "top_customers": [dict(r) for r in top_cust],
-            "top_items": [dict(r) for r in top_items],
-            "ultima_fecha": latest_date
+            "top_customers": [dict(r) for r in top_cust] if top_cust else [],
+            "top_items": [dict(r) for r in top_items] if top_items else [],
+            "ultima_fecha": actual_latest
         }
     
     # --- LOGICA DE TIEMPOS ---
     else:
-        q = "SELECT Fecha, Centro, Carga_Dia FROM tiempos_carga WHERE 1=1"
+        # Regla: Excluir centros auxiliares (empiezan por 9)
+        q = "SELECT Fecha, Centro, Carga_Dia FROM tiempos_carga WHERE Centro NOT LIKE '9%'"
         params = []
         if fecha_inicio:
             q += " AND Fecha >= ?"
@@ -251,16 +287,21 @@ async def get_summary(request: Request, fecha_inicio: str = None, fecha_fin: str
         num_dias = df['Fecha'].nunique()
         total_carga = df['Carga_Dia'].sum()
         
-        evol = df.groupby('Fecha')['Carga_Dia'].sum()
+        evol = df.groupby('Fecha')['Carga_Dia'].sum().sort_index()
+        
+        # Rankings (agregados por el periodo seleccionado)
         ranking = df.groupby('Centro')['Carga_Dia'].sum().reset_index().sort_values('Carga_Dia', ascending=False)
-        ranking['Media_Diaria'] = ranking['Carga_Dia'] / num_dias
+        ranking['Media_Diaria'] = ranking['Carga_Dia'] / (num_dias if num_dias > 0 else 1)
         
         # Evolucion de los Top 5 centros
         top_5_centros = ranking.head(5)['Centro'].tolist()
         evol_centros = {}
         for c in top_5_centros:
             c_data = df[df['Centro'] == c].groupby('Fecha')['Carga_Dia'].sum().reindex(evol.index, fill_value=0)
-            evol_centros[str(c)] = {"cargas": c_data.values.tolist()}
+            evol_centros[str(c)] = {
+                "fechas": evol.index.tolist(),
+                "cargas": c_data.values.tolist()
+            }
             
         return {
             "kpis": {
@@ -271,7 +312,7 @@ async def get_summary(request: Request, fecha_inicio: str = None, fecha_fin: str
             },
             "evolucion_total": {"fechas": evol.index.tolist(), "cargas": evol.values.tolist()},
             "evolucion_centros": evol_centros,
-            "rankings": [{"Centro": str(r['Centro']), "Carga_Total": r['Carga_Dia'], "Media_Diaria": r['Media_Diaria']} for r in ranking.to_dict('records')],
+            "rankings": [{"Centro": str(r['Centro']), "Carga_Total": round(r['Carga_Dia'], 2), "Media_Diaria": round(r['Media_Diaria'], 2)} for r in ranking.to_dict('records')],
             "ultima_fecha": df['Fecha'].max()
         }
 

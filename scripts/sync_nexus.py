@@ -1,8 +1,8 @@
 """
-RPK NEXUS - Sincronizador Maestro (Perfect Migration)
+RPK NEXUS - Sincronizador Maestro (Perfect Migration - High Performance)
 Este script centraliza los datos de diversos orígenes (Excel y SQLite en red)
 hacia la base de datos local RPK NEXUS (rpk_industrial.db).
-Optimizado para eliminar la latencia de lectura de Excel en el servidor FastAPI.
+Optimizado con copia local previa para evitar latencia de red en Pandas.
 """
 
 import os
@@ -10,18 +10,20 @@ import sqlite3
 import pandas as pd
 from sqlalchemy import create_engine
 from datetime import datetime
+import shutil
+import tempfile
 
 # --- CONFIGURACIÓN DE RUTAS ---
 LOCAL_BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOCAL_DB = os.path.join(LOCAL_BASE, "backend", "db", "rpk_industrial.db")
 
-# Fuentes de Red (UNC) - Rutas especificadas por el usuario
-REMOTE_STOCK_EXCEL = r"\\RPK4TGN\ofimatica\Supply Chain\PLAN PRODUCCION\PANEL\_PROYECTOS\DASHBOARD_STOCK\backend\RESUMEN_STOCK.xlsx"
-REMOTE_TIME_EXCEL = r"\\RPK4TGN\ofimatica\Supply Chain\PLAN PRODUCCION\PANEL\_PROYECTOS\DASHBOARD_TIEMPOS\ANALISIS_MENSUAL_TIEMPOS_V2.xlsx"
+# Fuentes de Red (UNC) - Usamos IPs para mayor estabilidad
+REMOTE_SERVER = "145.3.0.54"
+REMOTE_PATH = r"\\"+REMOTE_SERVER+r"\ofimatica\Supply Chain\PLAN PRODUCCION\PANEL\_PROYECTOS"
 
-# Opcional: Fuentes SQLite (para retrocompatibilidad o redundancia)
-REMOTE_STOCK_DB = r"\\RPK4TGN\ofimatica\Supply Chain\PLAN PRODUCCION\PANEL\_PROYECTOS\DASHBOARD_STOCK\backend\db\rpk_industrial.db"
-REMOTE_TIME_DB = r"\\RPK4TGN\ofimatica\Supply Chain\PLAN PRODUCCION\PANEL\_PROYECTOS\DASHBOARD_TIEMPOS\backend\db\rpk_industrial.db"
+REMOTE_STOCK_EXCEL = os.path.join(REMOTE_PATH, "DASHBOARD_STOCK", "backend", "RESUMEN_STOCK.xlsx")
+REMOTE_STOCK_OBJETIVOS = os.path.join(REMOTE_PATH, "DASHBOARD_STOCK", "backend", "OBJETIVOS_STOCK.xlsx")
+REMOTE_TIME_EXCEL = os.path.join(REMOTE_PATH, "DASHBOARD_TIEMPOS", "backend", "ANALISIS_MENSUAL_TIEMPOS_V2.xlsx")
 
 def sync_data():
     t_now = datetime.now().strftime('%H:%M:%S')
@@ -32,74 +34,85 @@ def sync_data():
         return
 
     engine_local = create_engine(f"sqlite:///{LOCAL_DB.replace(os.sep, '/')}")
+    temp_dir = tempfile.gettempdir()
+
+    def local_excel_load(remote_path):
+        if not os.path.exists(remote_path):
+            return None
+        local_path = os.path.join(temp_dir, os.path.basename(remote_path))
+        print(f"   [SYNC] Copiando {os.path.basename(remote_path)} a local...")
+        shutil.copy2(remote_path, local_path)
+        return pd.ExcelFile(local_path)
 
     # --- 1. SINCRONIZACION DE STOCK ---
-    if os.path.exists(REMOTE_STOCK_EXCEL):
-        print("[INFO] Importando datos de STOCK desde Excel (Red)...")
-        try:
-            xl = pd.ExcelFile(REMOTE_STOCK_EXCEL)
+    try:
+        xl_stock = local_excel_load(REMOTE_STOCK_EXCEL)
+        if xl_stock:
+            print("[INFO] Procesando datos de STOCK...")
             
-            # Detalle actual (SNAPSHOT)
-            if 'Datos_Detalle' in xl.sheet_names:
-                df_det = xl.parse('Datos_Detalle')
+            # 1.1 Cargar Objetivos
+            df_obj = None
+            if os.path.exists(REMOTE_STOCK_OBJETIVOS):
+                try:
+                    local_obj_path = os.path.join(temp_dir, os.path.basename(REMOTE_STOCK_OBJETIVOS))
+                    shutil.copy2(REMOTE_STOCK_OBJETIVOS, local_obj_path)
+                    df_obj_raw = pd.read_excel(local_obj_path)
+                    df_obj_raw.columns = [c.strip() for c in df_obj_raw.columns]
+                    obj_cols = [c for c in df_obj_raw.columns if 'OBJETIVO' in c.upper()]
+                    art_cols = [c for c in df_obj_raw.columns if 'ARTICULO' in c.upper() or 'ART' in c.upper()]
+                    if obj_cols and art_cols:
+                        df_obj = df_obj_raw.rename(columns={art_cols[0]: 'Articulo', obj_cols[0]: 'Stock_Objetivo'})
+                        df_obj['Articulo'] = df_obj['Articulo'].astype(str).str.strip().str.upper()
+                except: pass
+            
+            if df_obj is None and 'STOCK MEDIO-ARTICULO OBJETIVO' in xl_stock.sheet_names:
+                df_obj_raw = xl_stock.parse('STOCK MEDIO-ARTICULO OBJETIVO')
+                df_obj_raw.columns = [c.strip() for c in df_obj_raw.columns]
+                obj_cols = [c for c in df_obj_raw.columns if 'OBJETIVO' in c.upper()]
+                art_cols = [c for c in df_obj_raw.columns if 'ARTICULO' in c.upper() or 'ART' in c.upper()]
+                if obj_cols and art_cols:
+                    df_obj = df_obj_raw.rename(columns={art_cols[0]: 'Articulo', obj_cols[0]: 'Stock_Objetivo'})
+                    df_obj['Articulo'] = df_obj['Articulo'].astype(str).str.strip().str.upper()
+
+            # 1.2 Detalle actual
+            if 'Datos_Detalle' in xl_stock.sheet_names:
+                df_det = xl_stock.parse('Datos_Detalle')
+                df_det['Articulo_Merge'] = df_det['Articulo'].astype(str).str.strip().str.upper()
+                if df_obj is not None:
+                    df_det = pd.merge(df_det, df_obj[['Articulo', 'Stock_Objetivo']], 
+                                    left_on='Articulo_Merge', right_on='Articulo', 
+                                    how='left', suffixes=('', '_new'))
+                    if 'Stock_Objetivo_new' in df_det.columns:
+                        df_det['Stock_Objetivo'] = df_det['Stock_Objetivo_new'].fillna(0)
+                        df_det = df_det.drop(columns=['Stock_Objetivo_new', 'Articulo_y']).rename(columns={'Articulo_x': 'Articulo'})
+                
                 df_det.to_sql("stock_snapshot", engine_local, if_exists="replace", index=False)
                 print(f"   [OK] stock_snapshot: {len(df_det)} registros.")
             
-            # Evolucion historica
-            if 'Evolucion_Diaria' in xl.sheet_names:
-                df_ev = xl.parse('Evolucion_Diaria')
+            # 1.3 Evolucion
+            if 'Evolucion_Diaria' in xl_stock.sheet_names:
+                df_ev = xl_stock.parse('Evolucion_Diaria')
                 df_ev.to_sql("stock_evolucion", engine_local, if_exists="replace", index=False)
                 print(f"   [OK] stock_evolucion: {len(df_ev)} registros.")
-
-            # Objetivos (si existen)
-            if 'Objetivos' in xl.sheet_names:
-                df_obj = xl.parse('Objetivos')
-                df_obj.to_sql("stock_objetivos", engine_local, if_exists="replace", index=False)
-                print(f"   [OK] stock_objetivos: {len(df_obj)} registros.")
-
-        except Exception as e:
-            print(f"   [WARN] Error procesando Excel de Stock: {e}")
-    elif os.path.exists(REMOTE_STOCK_DB):
-        print("[INFO] Sincronizando datos de STOCK desde DB remota...")
-        try:
-            engine_rem = create_engine(f"sqlite:///{REMOTE_STOCK_DB.replace(os.sep, '/')}")
-            df = pd.read_sql("SELECT * FROM stock_snapshot", engine_rem)
-            df.to_sql("stock_snapshot", engine_local, if_exists="replace", index=False)
-            print(f"   [OK] stock_snapshot: {len(df)} registros.")
-        except Exception as e:
-            print(f"   [ERROR] {e}")
-    else:
-        print("[WARN] No se encontro ninguna fuente de Stock (Excel o DB).")
+    except Exception as e:
+        print(f"   [WARN] Error Stock: {e}")
 
     # --- 2. SINCRONIZACION DE TIEMPOS ---
-    if os.path.exists(REMOTE_TIME_EXCEL):
-        print("[INFO] Importando datos de TIEMPOS desde Excel (Red)...")
-        try:
-            xl = pd.ExcelFile(REMOTE_TIME_EXCEL)
-            
-            if 'Datos_Centros' in xl.sheet_names:
-                df_c = xl.parse('Datos_Centros')
+    try:
+        xl_time = local_excel_load(REMOTE_TIME_EXCEL)
+        if xl_time:
+            print("[INFO] Procesando datos de TIEMPOS...")
+            if 'Datos_Centros' in xl_time.sheet_names:
+                df_c = xl_time.parse('Datos_Centros')
                 df_c.to_sql("tiempos_carga", engine_local, if_exists="replace", index=False)
                 print(f"   [OK] tiempos_carga: {len(df_c)} registros.")
             
-            if 'Datos_Centro_Articulo' in xl.sheet_names:
-                df_ca = xl.parse('Datos_Centro_Articulo')
+            if 'Datos_Centro_Articulo' in xl_time.sheet_names:
+                df_ca = xl_time.parse('Datos_Centro_Articulo')
                 df_ca.to_sql("tiempos_detalle_articulo", engine_local, if_exists="replace", index=False)
                 print(f"   [OK] tiempos_detalle_articulo: {len(df_ca)} registros.")
-
-        except Exception as e:
-            print(f"   [WARN] Error procesando Excel de Tiempos: {e}")
-    elif os.path.exists(REMOTE_TIME_DB):
-        print("[INFO] Sincronizando datos de TIEMPOS desde DB remota...")
-        try:
-            engine_rem = create_engine(f"sqlite:///{REMOTE_TIME_DB.replace(os.sep, '/')}")
-            df = pd.read_sql("SELECT * FROM tiempos_carga", engine_rem)
-            df.to_sql("tiempos_carga", engine_local, if_exists="replace", index=False)
-            print(f"   [OK] tiempos_carga: {len(df)} registros.")
-        except Exception as e:
-            print(f"   [ERROR] {e}")
-    else:
-        print("[WARN] No se encontro ninguna fuente de Tiempos (Excel o DB).")
+    except Exception as e:
+        print(f"   [WARN] Error Tiempos: {e}")
 
     t_end = datetime.now().strftime('%H:%M:%S')
     print(f"\n[{t_end}] [FIN] Proceso de sincronizacion finalizado.")

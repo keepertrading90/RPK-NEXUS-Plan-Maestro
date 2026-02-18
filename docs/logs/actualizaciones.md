@@ -1,5 +1,11 @@
 # Historial de Actualizaciones - RPK NEXUS
 
+## [2026-02-18] Restauración de Integridad: Stock y Tiempos
+- **Frontend Mirror**: Los archivos `index.html`, `app.js` y `styles.css` de los módulos Stock y Tiempos han sido restaurados a su estado original de producción (Red Y:).
+- **Backend Consolidado**: `server_nexus.py` ahora implementa el 100% de la lógica original (filtros de centros auxiliares, desgloses mensuales, evolución de stock objetivo).
+- **Sincronizador Maestro v2**: Mejora del script `sync_nexus.py` para incluir la carga de objetivos de stock y usar rutas UNC directas para mayor estabilidad.
+- **Enrutamiento Relativo**: Implementación de un manejador genérico de módulos en FastAPI que fuerza la barra al final (`/mod/stock/`), solucionando problemas de carga de activos locales.
+
 ## [2026-02-18] Integración de Simulador v1 Classic
 - **Restauración de Interfaz**: Se ha copiado la interfaz y funcionalidad exacta del "iniciar v1 local" en el módulo de simulador.
 - **Backend Unificado**: Integración de `simulation_core` y esquemas de base de datos SQLAlchemy dentro del servidor Nexus central.
