@@ -22,8 +22,12 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 :: 2. Lanzar Servidor y UI
-echo [2/3] Levantando Servidor Nexus Hub...
 echo.
+echo [PASO 2] Lanzando Servidor Nexus Hub y Portal Web...
+echo.
+
+:: Liberar puerto 8000 si está ocupado
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr :8000 ^| findstr LISTENING') do taskkill /f /pid %%a >nul 2>&1
 
 :: Abrir el navegador justo después de lanzar el servidor
 start http://localhost:8000

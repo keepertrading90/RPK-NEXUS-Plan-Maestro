@@ -10,7 +10,6 @@ from sqlalchemy import Column, Integer, String, Float, DateTime, Index, create_e
 from sqlalchemy.orm import declarative_base
 
 # --- CONFIGURACIÓN DE RUTAS ---
-# Detecta la raíz del proyecto para asegurar portabilidad
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DB_PATH = os.path.join(BASE_DIR, "backend", "db")
 SIM_DB_FILE = os.path.join(DB_PATH, "simulador.db")
@@ -21,12 +20,12 @@ def manage_db_files():
     """Realiza la copia física de la base de datos si rpk_industrial.db no existe."""
     if not os.path.exists(NEXUS_DB_FILE):
         if os.path.exists(SIM_DB_FILE):
-            print(f"📦 Preservando datos: Copiando {SIM_DB_FILE} a {NEXUS_DB_FILE}...")
+            print(f"[INFO] Preservando datos: Copiando {SIM_DB_FILE} a {NEXUS_DB_FILE}...")
             shutil.copy2(SIM_DB_FILE, NEXUS_DB_FILE)
         else:
-            print("⚠️ Advertencia: No se detectó 'simulador.db'. Se iniciará una base de datos Nexus desde cero.")
+            print("[WARN] Advertencia: No se detectó 'simulador.db'. Se iniciará una base de datos Nexus desde cero.")
     else:
-        print(f"ℹ️ El archivo {NEXUS_DB_FILE} ya existe. Procediendo a actualizar esquema.")
+        print(f"[INFO] El archivo {NEXUS_DB_FILE} ya existe. Procediendo a actualizar esquema.")
 
 # --- DEFINICIÓN DE ESQUEMA (SQLAlchemy) ---
 Base = declarative_base()
@@ -62,10 +61,10 @@ def run_migration():
     engine = create_engine(engine_url)
     
     # 3. Creación de tablas (no afecta a las existentes en simulador.db)
-    print("🚀 Creando modelos RPK NEXUS (stock_snapshot, tiempos_carga)...")
+    print("[INFO] Creando modelos RPK NEXUS (stock_snapshot, tiempos_carga)...")
     Base.metadata.create_all(bind=engine)
     
-    print(f"✅ Migración completada. Base de datos RPK Nexus lista en:\n   {NEXUS_DB_FILE}")
+    print(f"[OK] Migración completada. Base de datos RPK Nexus lista en:\n   {NEXUS_DB_FILE}")
 
 if __name__ == "__main__":
     run_migration()

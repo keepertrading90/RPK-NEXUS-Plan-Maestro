@@ -1,52 +1,62 @@
 """
-RPK NEXUS - Servidor Central FastAPI
-Servicio web para el Nexus Hub y API de datos unificados.
+RPK NEXUS - Servidor Central Optimizado (SQLite Native)
+Arquitectura de alto rendimiento basada en FastAPI y SQLite local.
 """
 
 import os
 import sys
 import sqlite3
 import uvicorn
+import pandas as pd
 from pathlib import Path
-from fastapi import FastAPI, HTTPException
+from datetime import datetime
+from typing import List, Optional
+from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 
-# Configuración de rutas - Añadir raíz al path de Python
-BASE_DIR = Path(__file__).resolve().parent.parent
-if str(BASE_DIR) not in sys.path:
-    sys.path.append(str(BASE_DIR))
-from pydantic import BaseModel
-from typing import List, Optional
-import pandas as pd
-from datetime import datetime
-from backend.analytics_core import get_cobertura_global
-from backend.db.consultor import traducir_a_sql, ejecutar_consulta
-
-# Rutas de Red para compatibilidad
-STOCK_EXCEL = Path(r"\\RPK4TGN\ofimatica\Supply Chain\PLAN PRODUCCION\PANEL\_PROYECTOS\DASHBOARD_STOCK\backend\RESUMEN_STOCK.xlsx")
-TIEMPOS_EXCEL = Path(r"\\RPK4TGN\ofimatica\Supply Chain\PLAN PRODUCCION\PANEL\_PROYECTOS\DASHBOARD_TIEMPOS\ANALISIS_MENSUAL_TIEMPOS_V2.xlsx")
-
-# Configuración de rutas
+# --- CONFIGURACION DE RUTAS ---
 BASE_DIR = Path(__file__).resolve().parent.parent
 DB_PATH = BASE_DIR / "backend" / "db" / "rpk_industrial.db"
 STATIC_DIR = BASE_DIR / "frontend"
 
-app = FastAPI(title="RPK NEXUS API")
+if str(BASE_DIR) not in sys.path:
+    sys.path.append(str(BASE_DIR))
 
-# Montar archivos estáticos del Hub
-app.mount("/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="assets")
+from backend.db.consultor import traducir_a_sql, ejecutar_consulta
 
-# Montar directorios de módulos (Activos)
-app.mount("/mod/stock/static", StaticFiles(directory=str(STATIC_DIR / "modules" / "stock")), name="stock_static")
-app.mount("/mod/tiempos/static", StaticFiles(directory=str(STATIC_DIR / "modules" / "tiempos")), name="tiempos_static")
-app.mount("/mod/simulador/static", StaticFiles(directory=str(STATIC_DIR / "modules" / "simulador")), name="simulador_static")
+app = FastAPI(title="RPK NEXUS API - v2.0")
+
+# Middleware para evitar problemas de CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Modelos
 class Message(BaseModel):
     text: str
 
-# Endpoints de UI
+# Auxiliares de Base de Datos
+def query_db(query, args=(), one=False):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute(query, args)
+        rv = cur.fetchall()
+        conn.close()
+        return (rv[0] if rv else None) if one else rv
+    except Exception as e:
+        print(f"DB Error: {e}")
+        return None
+
+# --- ENDPOINTS DE INTERFAZ (UI) ---
+
 @app.get("/")
 async def get_index():
     return FileResponse(STATIC_DIR / "ui" / "index.html")
@@ -57,96 +67,227 @@ async def get_stock_mod():
 
 @app.get("/mod/tiempos")
 async def get_tiempos_mod():
-    # El dashboard de tiempos tiene el index en ui/index.html usualmente
-    path = STATIC_DIR / "modules" / "tiempos" / "ui" / "index.html"
-    if not path.exists(): path = STATIC_DIR / "modules" / "tiempos" / "index.html"
+    path = STATIC_DIR / "modules" / "tiempos" / "index.html"
+    if not path.exists():
+        path = STATIC_DIR / "modules" / "tiempos" / "ui" / "index.html"
     return FileResponse(path)
 
 @app.get("/mod/simulador")
 async def get_simulador_mod():
     path = STATIC_DIR / "modules" / "simulador" / "index.html"
-    if not path.exists(): path = STATIC_DIR / "modules" / "simulador" / "ui" / "index.html"
+    if not path.exists():
+        path = STATIC_DIR / "modules" / "simulador" / "ui" / "index.html"
     return FileResponse(path)
 
-# Endpoints de Datos
+# Montar directorios estáticos
+app.mount("/mod", StaticFiles(directory=str(STATIC_DIR / "modules")), name="modules")
+app.mount("/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="assets")
+
+# --- ENDPOINTS DE API - COMPATIBILIDAD Y DATOS ---
+
 @app.get("/api/v1/status")
 async def get_status():
-    """Estado general de la base de datos Nexus"""
     try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        
-        cursor.execute("SELECT COUNT(*) FROM stock_snapshot")
-        stock_count = cursor.fetchone()[0]
-        
-        cursor.execute("SELECT COUNT(*) FROM tiempos_carga")
-        tiempos_count = cursor.fetchone()[0]
-        
-        conn.close()
+        res_stock = query_db("SELECT COUNT(*) as n FROM stock_snapshot", one=True)
+        res_tiempos = query_db("SELECT COUNT(*) as n FROM tiempos_carga", one=True)
         return {
             "status": "online",
-            "database": "connected",
+            "db_path": str(DB_PATH),
             "records": {
-                "stock": stock_count,
-                "tiempos": tiempos_count
+                "stock": res_stock['n'] if res_stock else 0,
+                "tiempos": res_tiempos['n'] if res_tiempos else 0
             }
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except:
+        return {"status": "error", "message": "Database disconnected"}
 
-# --- ENDPOINTS COMPATIBILIDAD STOCK ---
 @app.get("/api/fechas")
-async def get_stock_dates(refresh: bool = False):
-    try:
-        xl = pd.ExcelFile(STOCK_EXCEL)
-        df_ev = xl.parse('Evolucion_Diaria')
-        fechas = sorted(pd.to_datetime(df_ev['Fecha']).dt.strftime('%Y-%m-%d').unique())
-        return {"fecha_min": fechas[0], "fecha_max": fechas[-1], "fechas": fechas}
-    except: return {"error": "No se pudo leer el Excel de Stock"}
+async def get_dates(request: Request):
+    referer = request.headers.get("referer", "")
+    table = "tiempos_carga"
+    if "mod/stock" in referer:
+        table = "stock_snapshot"
+        
+    res = query_db(f"SELECT MIN(Fecha) as min, MAX(Fecha) as max FROM {table}", one=True)
+    dates = query_db(f"SELECT DISTINCT Fecha FROM {table} ORDER BY Fecha")
+    
+    if not res or not dates:
+        return {"fechas": [], "fecha_min": None, "fecha_max": None}
+        
+    return {
+        "fecha_min": str(res['min']).split(' ')[0], # Limpiar si tiene hora
+        "fecha_max": str(res['max']).split(' ')[0],
+        "fechas": [str(d['Fecha']).split(' ')[0] for d in dates]
+    }
 
 @app.get("/api/summary")
-async def get_stock_summary(fecha_inicio: str = None, fecha_fin: str = None):
-    try:
-        xl = pd.ExcelFile(STOCK_EXCEL)
-        df_det = xl.parse('Datos_Detalle')
-        df_ev = xl.parse('Evolucion_Diaria')
-        df_det['Fecha'] = pd.to_datetime(df_det['Fecha']).dt.strftime('%Y-%m-%d')
-        df_ev['Fecha'] = pd.to_datetime(df_ev['Fecha']).dt.strftime('%Y-%m-%d')
-        latest = df_ev['Fecha'].max()
-        df_l = df_det[df_det['Fecha'] == latest]
+async def get_summary(request: Request, fecha_inicio: str = None, fecha_fin: str = None):
+    referer = request.headers.get("referer", "")
+    
+    # --- LOGICA DE STOCK ---
+    if "mod/stock" in referer:
+        latest_date = query_db("SELECT MAX(Fecha) FROM stock_snapshot", one=True)[0]
+        kpis = query_db("""
+            SELECT SUM(Valor_Total) as valor_total, 
+                   COUNT(DISTINCT Articulo) as num_items, 
+                   COUNT(DISTINCT Cliente) as num_clientes 
+            FROM stock_snapshot WHERE Fecha = ?
+        """, (latest_date,), one=True)
+        evol = query_db("SELECT Fecha, Valor_Total FROM stock_evolucion ORDER BY Fecha")
+        top_cust = query_db("""
+            SELECT Cliente, SUM(Valor_Total) as Valor_Total 
+            FROM stock_snapshot WHERE Fecha = ? 
+            GROUP BY Cliente ORDER BY Valor_Total DESC LIMIT 5
+        """, (latest_date,))
+        top_items = query_db("""
+            SELECT Articulo, Descripcion, SUM(Cantidad) as Cantidad, SUM(Valor_Total) as Valor_Total 
+            FROM stock_snapshot WHERE Fecha = ? 
+            GROUP BY Articulo, Descripcion ORDER BY Valor_Total DESC LIMIT 100
+        """, (latest_date,))
+        
         return {
-            "kpis": {"valor_total": float(df_l['Valor_Total'].sum()), "num_items": int(df_l['Articulo'].nunique()), "num_clientes": int(df_l['Cliente'].nunique())},
-            "evolucion_total": {"fechas": df_ev['Fecha'].tolist(), "valores": df_ev['Valor_Total'].tolist()},
-            "top_customers": df_l.groupby('Cliente')['Valor_Total'].sum().nlargest(5).reset_index().to_dict(orient='records'),
-            "top_items": df_l.groupby(['Articulo','Descripcion']).agg({'Valor_Total':'sum','Cantidad':'sum'}).nlargest(100,'Valor_Total').reset_index().to_dict(orient='records'),
-            "ultima_fecha": latest
+            "kpis": dict(kpis) if kpis else {"valor_total": 0, "num_items": 0, "num_clientes": 0},
+            "evolucion_total": {
+                "fechas": [r['Fecha'] for r in evol],
+                "valores": [r['Valor_Total'] for r in evol]
+            },
+            "top_customers": [dict(r) for r in top_cust],
+            "top_items": [dict(r) for r in top_items],
+            "ultima_fecha": latest_date
         }
-    except: return {"error": "Error cargando summary de stock"}
+    
+    # --- LOGICA DE TIEMPOS ---
+    else:
+        q = "SELECT Fecha, Centro, Carga_Dia FROM tiempos_carga WHERE 1=1"
+        params = []
+        if fecha_inicio:
+            q += " AND Fecha >= ?"
+            params.append(fecha_inicio)
+        if fecha_fin:
+            q += " AND Fecha <= ?"
+            params.append(fecha_fin)
+            
+        data = query_db(q, tuple(params))
+        if not data: return {"kpis": {"total_carga": 0, "media_carga": 0, "num_centros": 0}, "rankings": [], "evolucion_total": {"fechas":[], "cargas":[]}, "evolucion_centros": {}}
+        
+        df = pd.DataFrame([dict(r) for r in data])
+        df['Fecha'] = pd.to_datetime(df['Fecha']).dt.strftime('%Y-%m-%d')
+        
+        num_dias = df['Fecha'].nunique()
+        total_carga = df['Carga_Dia'].sum()
+        
+        evol = df.groupby('Fecha')['Carga_Dia'].sum()
+        ranking = df.groupby('Centro')['Carga_Dia'].sum().reset_index().sort_values('Carga_Dia', ascending=False)
+        ranking['Media_Diaria'] = ranking['Carga_Dia'] / num_dias
+        
+        # Evolucion de los Top 5 centros
+        top_5_centros = ranking.head(5)['Centro'].tolist()
+        evol_centros = {}
+        for c in top_5_centros:
+            c_data = df[df['Centro'] == c].groupby('Fecha')['Carga_Dia'].sum().reindex(evol.index, fill_value=0)
+            evol_centros[str(c)] = {"cargas": c_data.values.tolist()}
+            
+        return {
+            "kpis": {
+                "total_carga": round(float(total_carga), 2),
+                "media_carga": round(float(total_carga / num_dias), 2) if num_dias > 0 else 0,
+                "num_centros": int(df['Centro'].nunique()),
+                "num_dias": num_dias
+            },
+            "evolucion_total": {"fechas": evol.index.tolist(), "cargas": evol.values.tolist()},
+            "evolucion_centros": evol_centros,
+            "rankings": [{"Centro": str(r['Centro']), "Carga_Total": r['Carga_Dia'], "Media_Diaria": r['Media_Diaria']} for r in ranking.to_dict('records')],
+            "ultima_fecha": df['Fecha'].max()
+        }
+
+# --- ENDPOINTS ESPECIFICOS DE STOCK ---
+
+@app.get("/api/customers")
+async def get_stock_customers():
+    latest_date = query_db("SELECT MAX(Fecha) FROM stock_snapshot", one=True)[0]
+    custs = query_db("SELECT Cliente, SUM(Valor_Total) as Valor_Total FROM stock_snapshot WHERE Fecha = ? GROUP BY Cliente ORDER BY Valor_Total DESC", (latest_date,))
+    return {"customers": [dict(r) for r in custs]}
+
+@app.get("/api/customer/{cliente_id}/items")
+async def get_customer_items(cliente_id: str):
+    latest_date = query_db("SELECT MAX(Fecha) FROM stock_snapshot", one=True)[0]
+    items = query_db("SELECT Articulo, Descripcion, Cantidad, Valor_Total FROM stock_snapshot WHERE Cliente = ? AND Fecha = ? ORDER BY Valor_Total DESC", (cliente_id, latest_date))
+    return {"items": [dict(r) for r in items], "cliente": cliente_id, "fecha": latest_date}
+
+# --- ENDPOINTS ESPECIFICOS DE TIEMPOS ---
+
+@app.get("/api/centros")
+async def get_centros():
+    res = query_db("SELECT DISTINCT Centro FROM tiempos_carga ORDER BY Centro")
+    return {"centros": [{"id": str(r['Centro'])} for r in res]}
+
+@app.get("/api/centro/{centros_ids}")
+async def get_centro_evolution(centros_ids: str, fecha_inicio: str = None, fecha_fin: str = None):
+    ids = [c.strip() for c in centros_ids.split(',')]
+    placeholders = ','.join(['?'] * len(ids))
+    
+    q = f"SELECT Fecha, Centro, Carga_Dia FROM tiempos_carga WHERE Centro IN ({placeholders})"
+    params = list(ids)
+    
+    if fecha_inicio:
+        q += " AND Fecha >= ?"
+        params.append(fecha_inicio)
+    if fecha_fin:
+        q += " AND Fecha <= ?"
+        params.append(fecha_fin)
+        
+    data = query_db(q, tuple(params))
+    if not data: return {"fechas": [], "centros": {}}
+    
+    df = pd.DataFrame([dict(r) for r in data])
+    df['Fecha'] = pd.to_datetime(df['Fecha']).dt.strftime('%Y-%m-%d')
+    all_dates = sorted(df['Fecha'].unique())
+    
+    result = {"fechas": all_dates, "centros": {}}
+    for cid in ids:
+        c_df = df[df['Centro'] == int(cid) if cid.isdigit() else df['Centro'] == cid]
+        if not c_df.empty:
+            c_evol = c_df.groupby('Fecha')['Carga_Dia'].sum().reindex(all_dates, fill_value=0)
+            result["centros"][cid] = {"cargas": c_evol.values.tolist()}
+            
+    return result
+
+@app.get("/api/centro/{centro_id}/articulos/mes/{mes}")
+async def get_centro_articles(centro_id: str, mes: str):
+    # Formato mes: YYYY-MM
+    q = "SELECT Articulo, OF, Horas, Fecha FROM tiempos_detalle_articulo WHERE Centro = ? AND Fecha LIKE ?"
+    data = query_db(q, (centro_id, f"{mes}%"))
+    
+    if not data: return {"articulos": []}
+    
+    df = pd.DataFrame([dict(r) for r in data])
+    total_horas = df['Horas'].sum()
+    
+    res = df.groupby(['Articulo', 'OF']).agg({
+        'Horas': 'sum',
+        'Fecha': 'nunique'
+    }).reset_index().rename(columns={'Fecha': 'dias'})
+    
+    res['porcentaje'] = (res['Horas'] / total_horas * 100).round(1)
+    res = res.sort_values('Horas', ascending=False)
+    
+    return {"articulos": res.to_dict('records')}
+
+# --- ENDPOINTS ASISTENTE ---
 
 @app.post("/api/v1/chat")
 async def chat_with_nexus(msg: Message):
-    """Asistente inteligente integrado con la BD Nexus"""
     try:
         sql = traducir_a_sql(msg.text)
         resultados, columnas = ejecutar_consulta(sql)
-        
         if not resultados:
-            return {"response": "No he encontrado datos específicos para esa consulta. Prueba con 'stock total' o 'carga de trabajo'."}
-        
-        # Formatear respuesta simple (primeros 5 resultados)
-        resp_text = f"He encontrado {len(resultados)} resultados. Aquí tienes el resumen:\n\n"
-        resp_text += " | ".join(columnas) + "\n"
-        resp_text += "-" * 30 + "\n"
-        for row in resultados[:5]:
-            resp_text += " | ".join(map(str, row)) + "\n"
-            
-        if len(resultados) > 5:
-            resp_text += f"\n... y {len(resultados) - 5} resultados más."
-            
-        return {"response": resp_text}
+            return {"response": "No he encontrado datos. Prueba con 'stock total' o 'carga de trabajo'."}
+        resp = f"Resultados:\n" + " | ".join(columnas) + "\n" + "-"*20 + "\n"
+        for row in resultados[:3]:
+            resp += " | ".join(map(str, row)) + "\n"
+        return {"response": resp}
     except Exception as e:
-        return {"response": f"Lo siento, ha ocurrido un error al consultar: {str(e)}"}
+        return {"response": f"Error: {str(e)}"}
 
 if __name__ == "__main__":
-    print(f"🚀 RPK NEXUS subiendo en http://localhost:8000")
     uvicorn.run(app, host="127.0.0.1", port=8000)
