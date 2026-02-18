@@ -1,5 +1,11 @@
 # Historial de Actualizaciones - RPK NEXUS
 
+## [2026-02-18] Integración de Simulador v1 Classic
+- **Restauración de Interfaz**: Se ha copiado la interfaz y funcionalidad exacta del "iniciar v1 local" en el módulo de simulador.
+- **Backend Unificado**: Integración de `simulation_core` y esquemas de base de datos SQLAlchemy dentro del servidor Nexus central.
+- **Persistencia Local**: El simulador ahora utiliza la base de datos central `rpk_industrial.db` para escenarios e histórico, manteniendo independencia de red.
+- **Optimización de Carga**: Implementación de caché binaria (.pkl) para el Maestro Fleje, reduciendo el tiempo de arranque de la simulación.
+
 ## [2026-02-18] Lanzamiento RPK NEXUS v3.2: Unificación de Módulos
 - **Unificación Total**: Integración de los dashboards de Stock, Tiempos y Simulador de Producción en un solo portal centralizado.
 - **Arquitectura de Parcheo**: Los frontends originales se sirven ahora localmente desde `frontend/modules/` para permitir ajustes de ruta sin tocar los originales de la red.

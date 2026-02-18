@@ -26,6 +26,21 @@ if str(BASE_DIR) not in sys.path:
     sys.path.append(str(BASE_DIR))
 
 from backend.db.consultor import traducir_a_sql, ejecutar_consulta
+from backend.db import models_sim
+from backend.core import simulation_core
+import json
+from fastapi import Depends
+from sqlalchemy.orm import Session
+
+# Inicializar tablas del simulador
+models_sim.init_sim_db()
+
+def get_db_sim():
+    db = models_sim.SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 app = FastAPI(title="RPK NEXUS API - v2.0")
 
@@ -40,6 +55,50 @@ app.add_middleware(
 # Modelos
 class Message(BaseModel):
     text: str
+
+# Modelos para el Simulador
+class OverrideBase(BaseModel):
+    articulo: str
+    centro: str
+    oee_override: Optional[float] = None
+    ppm_override: Optional[float] = None
+    demanda_override: Optional[float] = None
+    new_centro: Optional[str] = None
+    horas_turno_override: Optional[int] = None
+    setup_time_override: Optional[float] = None
+    personnel_ratio_override: Optional[float] = None
+
+class ScenarioCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    dias_laborales: Optional[int] = 238
+    horas_turno_global: Optional[int] = 16
+    center_configs: Optional[dict] = {}
+    overrides: List[OverrideBase] = []
+
+class ScenarioResponse(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    dias_laborales: int
+    horas_turno_global: int
+    center_configs_json: Optional[str] = None
+    
+    class Config:
+        from_attributes = True
+
+class HistoryResponse(BaseModel):
+    id: int
+    timestamp: str
+    name: str
+    changes_count: int
+    details_snapshot: Optional[str] = None
+
+class PreviewPayload(BaseModel):
+    overrides: List[OverrideBase]
+    dias_laborales: Optional[int] = None
+    horas_turno: Optional[int] = None
+    center_configs: Optional[dict] = None
 
 # Auxiliares de Base de Datos
 def query_db(query, args=(), one=False):
@@ -355,6 +414,169 @@ async def get_centro_articles(centro_id: str, mes: str):
     res = res.sort_values('Horas', ascending=False)
     
     return {"articulos": res.to_dict('records')}
+
+# --- ENDPOINTS DEL SIMULADOR (CLASSIC V1 INTEGRATION) ---
+
+@app.get("/api/scenarios", response_model=List[ScenarioResponse])
+def list_scenarios(db: Session = Depends(get_db_sim)):
+    return db.query(models_sim.Scenario).all()
+
+@app.get("/api/scenarios/{scenario_id}/history", response_model=List[HistoryResponse])
+def get_scenario_history(scenario_id: int, db: Session = Depends(get_db_sim)):
+    hist = db.query(models_sim.ScenarioHistory).filter(models_sim.ScenarioHistory.scenario_id == scenario_id).order_by(models_sim.ScenarioHistory.timestamp.desc()).all()
+    return [{
+        "id": h.id,
+        "timestamp": h.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+        "name": h.name,
+        "changes_count": h.changes_count,
+        "details_snapshot": h.details_snapshot
+    } for h in hist]
+
+@app.post("/api/scenarios", response_model=ScenarioResponse)
+def create_scenario(scenario_data: ScenarioCreate, db: Session = Depends(get_db_sim)):
+    existing = db.query(models_sim.Scenario).filter(models_sim.Scenario.name == scenario_data.name).first()
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Ya existe un escenario con el nombre '{scenario_data.name}'.")
+
+    db_scenario = models_sim.Scenario(
+        name=scenario_data.name, 
+        description=scenario_data.description,
+        dias_laborales=scenario_data.dias_laborales,
+        horas_turno_global=scenario_data.horas_turno_global,
+        center_configs_json=json.dumps(scenario_data.center_configs)
+    )
+    db.add(db_scenario)
+    db.commit()
+    db.refresh(db_scenario)
+    
+    for ov in scenario_data.overrides:
+        db_ov = models_sim.ScenarioDetail(
+            scenario_id=db_scenario.id,
+            articulo=ov.articulo,
+            centro=ov.centro,
+            oee_override=ov.oee_override,
+            ppm_override=ov.ppm_override,
+            demanda_override=ov.demanda_override,
+            new_centro=ov.new_centro,
+            horas_turno_override=ov.horas_turno_override,
+            personnel_ratio_override=ov.personnel_ratio_override,
+            setup_time_override=ov.setup_time_override
+        )
+        db.add(db_ov)
+    
+    db.commit()
+    
+    history_entry = models_sim.ScenarioHistory(
+        scenario_id=db_scenario.id,
+        name=db_scenario.name,
+        changes_count=len(scenario_data.overrides),
+        details_snapshot=json.dumps([ov.dict() for ov in scenario_data.overrides])
+    )
+    db.add(history_entry)
+    db.commit()
+    
+    return db_scenario
+
+@app.get("/api/simulate/base")
+async def get_base_simulation(db: Session = Depends(get_db_sim), dias_laborales: Optional[int] = None, horas_turno: Optional[int] = None):
+    try:
+        return simulation_core.get_simulation_data(db, dias_laborales=dias_laborales, horas_turno=horas_turno)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/simulate/{scenario_id}")
+async def get_scenario_simulation(scenario_id: int, db: Session = Depends(get_db_sim), dias_laborales: Optional[int] = None, horas_turno: Optional[int] = None):
+    try:
+        db_sc = db.query(models_sim.Scenario).filter(models_sim.Scenario.id == scenario_id).first()
+        if not db_sc:
+            raise HTTPException(status_code=404, detail="Scenario not found")
+        
+        d_lab = dias_laborales if dias_laborales is not None else db_sc.dias_laborales
+        h_tur = horas_turno if horas_turno is not None else db_sc.horas_turno_global
+        c_conf = json.loads(db_sc.center_configs_json) if db_sc.center_configs_json else {}
+
+        return simulation_core.get_simulation_data(
+            db, 
+            scenario_id, 
+            dias_laborales=d_lab, 
+            horas_turno=h_tur, 
+            center_configs=c_conf
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/simulate/preview")
+async def get_preview_simulation(payload: PreviewPayload, db: Session = Depends(get_db_sim)):
+    try:
+        return simulation_core.get_simulation_data(
+            db, 
+            overrides_list=payload.overrides, 
+            dias_laborales=payload.dias_laborales,
+            horas_turno=payload.horas_turno,
+            center_configs=payload.center_configs
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/scenarios/{scenario_id}")
+def delete_scenario(scenario_id: int, db: Session = Depends(get_db_sim)):
+    db_scenario = db.query(models_sim.Scenario).filter(models_sim.Scenario.id == scenario_id).first()
+    if not db_scenario:
+        raise HTTPException(status_code=404, detail="Scenario not found")
+    db.delete(db_scenario)
+    db.commit()
+    return {"message": "Scenario deleted"}
+
+@app.put("/api/scenarios/{scenario_id}/full", response_model=ScenarioResponse)
+def update_scenario_full(scenario_id: int, scenario_data: ScenarioCreate, db: Session = Depends(get_db_sim)):
+    db_scenario = db.query(models_sim.Scenario).filter(models_sim.Scenario.id == scenario_id).first()
+    if not db_scenario:
+        raise HTTPException(status_code=404, detail="Scenario not found")
+    
+    if db_scenario.name != scenario_data.name:
+        existing = db.query(models_sim.Scenario).filter(models_sim.Scenario.name == scenario_data.name).first()
+        if existing:
+             raise HTTPException(status_code=400, detail=f"No se puede renombrar: ya existe otro escenario con el nombre '{scenario_data.name}'.")
+    
+    db_scenario.name = scenario_data.name
+    if scenario_data.description:
+        db_scenario.description = scenario_data.description
+    
+    db_scenario.dias_laborales = scenario_data.dias_laborales
+    db_scenario.horas_turno_global = scenario_data.horas_turno_global
+    db_scenario.center_configs_json = json.dumps(scenario_data.center_configs)
+    
+    db.query(models_sim.ScenarioDetail).filter(models_sim.ScenarioDetail.scenario_id == scenario_id).delete()
+    db.query(models_sim.ScenarioHistory).filter(models_sim.ScenarioHistory.scenario_id == scenario_id).delete()
+    
+    for ov in scenario_data.overrides:
+        db_ov = models_sim.ScenarioDetail(
+            scenario_id=db_scenario.id,
+            articulo=ov.articulo,
+            centro=ov.centro,
+            oee_override=ov.oee_override,
+            ppm_override=ov.ppm_override,
+            demanda_override=ov.demanda_override,
+            new_centro=ov.new_centro,
+            horas_turno_override=ov.horas_turno_override,
+            personnel_ratio_override=ov.personnel_ratio_override,
+            setup_time_override=ov.setup_time_override
+        )
+        db.add(db_ov)
+    
+    db.commit()
+
+    history_entry = models_sim.ScenarioHistory(
+        scenario_id=db_scenario.id,
+        name=db_scenario.name,
+        changes_count=len(scenario_data.overrides),
+        details_snapshot=json.dumps([ov.dict() for ov in scenario_data.overrides])
+    )
+    db.add(history_entry)
+    db.commit()
+
+    db.refresh(db_scenario)
+    return db_scenario
 
 # --- ENDPOINTS ASISTENTE ---
 
