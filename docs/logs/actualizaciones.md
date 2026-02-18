@@ -1,5 +1,12 @@
 # Historial de Actualizaciones - RPK NEXUS
 
+## [2026-02-18] Certificación de Calidad: Tiempos V2 Refactor (Intacto)
+- **Fidelidad Visual Total**: Restauración completa del Dashboard de Tiempos V2 Refactor, recuperando el tema oscuro, tarjetas Bento y branding RPK original.
+- **Rutas de Alta Disponibilidad**: Ajuste de `server_nexus.py` para manejar automáticamente las rutas relativas de activos (CSS/JS) sin necesidad de prefijos, asegurando la carga inmediata del diseño.
+- **Motor de Datos Auto-Recargable**: Configuración del motor de datos de Tiempos con un mecanismo de "Hot-Reload" que actualiza la información desde los archivos Excel cada 60 segundos automáticamente.
+- **Sincronización de Activos**: Inclusión de los logos y recursos visuales directamente dentro de los módulos para eliminar dependencias externas y mejorar la velocidad de carga.
+- **QA Final Pass**: Validación de todos los endpoints de analítica (`/api/summary`, `/api/fechas`, `/api/centro`) para garantizar que el dashboard sea plenamente funcional.
+
 ## [2026-02-18] Integración Final: Hub, Analítica y Asistente
 - **KPIs en Tiempo Real**: El Portal Central ahora consume datos vivos de la base de datos a través del endpoint `/api/v1/hub_stats`. Los valores de Stock, Saturación y Cobertura ya no son estáticos.
 - **Nexus Assistant v1.0**: Implementación del endpoint de chat `/api/v1/chat` en el backend, permitiendo consultas en lenguaje natural directamente desde el Portal.
@@ -42,4 +49,4 @@
 - **GitHub**: Vinculación con repositorio remoto.
 
 ---
-*Última actualización: 2026-02-18 20:15*
+*Última actualización: 2026-02-18 20:55*
