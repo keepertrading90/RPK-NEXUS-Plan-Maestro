@@ -1,5 +1,10 @@
 # Registro de Errores y Debugging - RPK NEXUS
 
+## [2026-02-18 10:01] ModuleNotFoundError: No module named 'backend'
+- **Síntoma**: El servidor fallaba al iniciar indicando que no encontraba el módulo 'backend'.
+- **Causa**: Al ejecutar el script directamente desde la raíz, el entorno de ejecución no incluía el directorio base en la ruta de búsqueda de módulos de Python.
+- **Solución**: Inyección dinámica de la ruta raíz mediante `sys.path.append` en el archivo `server_nexus.py` y creación de archivos `__init__.py`.
+
 ## [2026-02-18 09:58] Error de Conexión (Unidad Y: No Disponible)
 - **Síntoma**: Los scripts de sincronización fallaban al no encontrar el disco mapeado `Y:`.
 - **Causa**: Variabilidad en el mapeo de red de las máquinas cliente.

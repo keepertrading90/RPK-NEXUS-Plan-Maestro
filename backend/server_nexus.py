@@ -4,12 +4,18 @@ Servicio web para el Nexus Hub y API de datos unificados.
 """
 
 import os
+import sys
 import sqlite3
 import uvicorn
+from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from pathlib import Path
+
+# Configuración de rutas - Añadir raíz al path de Python
+BASE_DIR = Path(__file__).resolve().parent.parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.append(str(BASE_DIR))
 from pydantic import BaseModel
 from typing import List, Optional
 from backend.analytics_core import get_cobertura_global
