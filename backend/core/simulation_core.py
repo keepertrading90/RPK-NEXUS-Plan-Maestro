@@ -29,7 +29,7 @@ def time_it(func):
         start_time = time.perf_counter()
         result = func(*args, **kwargs)
         end_time = time.perf_counter()
-        print(f"⏱️ [PERF] {func.__name__} tardó {end_time - start_time:.4f} segundos")
+        print(f"[PERF] {func.__name__} tardo {end_time - start_time:.4f} segundos")
         return result
     return wrapper
 
@@ -49,13 +49,13 @@ def get_base_dataframe():
 
     try:
         if use_cache:
-            print(f"🚀 Cargando desde caché binaria (Modo Ultra Rápido)...", flush=True)
+            print(f"[INFO] Cargando desde cache binaria (Modo Ultra Rapido)...", flush=True)
             start_load = time.perf_counter()
             _df_cache = pd.read_pickle(CACHE_PATH)
             end_load = time.perf_counter()
-            print(f"✅ Caché cargada en {end_load - start_load:.4f} segundos.", flush=True)
+            print(f"[INFO] Cache cargada en {end_load - start_load:.4f} segundos.", flush=True)
         else:
-            print(f"🚀 Cargando Excel Maestro por primera vez desde: {EXCEL_PATH}...", flush=True)
+            print(f"[INFO] Cargando Excel Maestro por primera vez desde: {EXCEL_PATH}...", flush=True)
             if not os.path.exists(EXCEL_PATH):
                 raise FileNotFoundError(f"No se encuentra el archivo maestro en: {EXCEL_PATH}")
             
@@ -69,14 +69,14 @@ def get_base_dataframe():
             _df_cache = _df_cache[~_df_cache['Centro'].isin(['nan', 'NaN', 'None', '', 'nan.0'])].copy()
             
             end_load = time.perf_counter()
-            print(f"✅ Excel cargado en {end_load - start_load:.4f} segundos.", flush=True)
+            print(f"[INFO] Excel cargado en {end_load - start_load:.4f} segundos.", flush=True)
             
             # Guardar caché para la próxima vez
-            print(f"🔄 Generando caché binaria para acelerar futuros arranques...", flush=True)
+            print(f"[INFO] Generando cache binaria para acelerar futuros arranques...", flush=True)
             _df_cache.to_pickle(CACHE_PATH)
             
     except Exception as e:
-        print(f"❌ Error al cargar DataFrame maestro: {e}")
+        print(f"[ERROR] Error al cargar DataFrame maestro: {e}")
         return None
 
     # Asegurar que centro_original existe (por si la caché es vieja)

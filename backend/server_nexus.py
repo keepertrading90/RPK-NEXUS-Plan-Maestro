@@ -12,9 +12,9 @@ from pathlib import Path
 from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 # --- CONFIGURACION DE RUTAS ---
@@ -29,7 +29,6 @@ from backend.db.consultor import traducir_a_sql, ejecutar_consulta
 from backend.db import models_sim
 from backend.core import simulation_core
 import json
-from fastapi import Depends
 from sqlalchemy.orm import Session
 
 # Inicializar tablas del simulador
@@ -128,7 +127,6 @@ async def get_index():
 async def get_module_index(mod_name: str, request: Request):
     # Forzar barra al final para que los activos relativos funcionen correctamente
     if not request.url.path.endswith("/"):
-        from fastapi.responses import RedirectResponse
         return RedirectResponse(url=str(request.url).rstrip("/") + "/")
     
     # Intentar servir index.html desde la raíz del módulo
@@ -139,30 +137,14 @@ async def get_module_index(mod_name: str, request: Request):
         if path_ui.exists():
             path = path_ui
         else:
-            return JSONResponse({"error": f"Módulo {mod_name} no encontrado"}, status_code=404)
+            return JSONResponse({"error": f"Modulo {mod_name} no encontrado"}, status_code=404)
             
-    print(f"[DEBUG] Sirviendo módulo {mod_name} desde: {path.absolute()}")
+    print(f"[DEBUG] Sirviendo modulo {mod_name} desde: {path.absolute()}")
     return FileResponse(path)
 
 # Montar directorios estáticos para los activos de los módulos
 app.mount("/mod", StaticFiles(directory=str(STATIC_DIR / "modules")), name="modules")
 app.mount("/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="assets")
-
-# --- REDIRECCIONES PARA ACTIVOS RELATIVOS ---
-@app.get("/mod/{mod_name}")
-async def redirect_to_mod_with_slash(mod_name: str, request: Request):
-    if not request.url.path.endswith("/"):
-        from fastapi.responses import RedirectResponse
-        return RedirectResponse(url=str(request.url).rstrip("/") + "/")
-    
-    # Si llega aquí con barra, servimos el index correspondiente
-    path = STATIC_DIR / "modules" / mod_name / "index.html"
-    if not path.exists():
-        path = STATIC_DIR / "modules" / mod_name / "ui" / "index.html"
-    
-    if path.exists():
-        return FileResponse(path)
-    raise HTTPException(status_code=404, detail="Module not found")
 
 # --- ENDPOINTS DE API - COMPATIBILIDAD Y DATOS ---
 
