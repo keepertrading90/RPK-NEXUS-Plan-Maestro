@@ -109,7 +109,7 @@
             const data = await res.json();
 
             // Nexus response
-            body.innerHTML += `<p style="margin-top:10px; color:var(--rpk-red)"><strong>Nexus:</strong> ${data.response}</p>`;
+            body.innerHTML += `<p style="margin-top:10px; color:var(--rpk-red); white-space: pre-wrap;"><strong>Nexus:</strong> ${data.response}</p>`;
             body.scrollTop = body.scrollHeight;
         }
     </script>

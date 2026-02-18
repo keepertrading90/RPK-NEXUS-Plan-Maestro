@@ -99,7 +99,6 @@ def main():
             sql = traducir_a_sql(pregunta)
             
             print(f"⚙️ Ejecutando Query...")
-            # print(f"DEBUG SQL: {sql}") # Desactiva print en producción
             
             resultados, columnas = ejecutar_consulta(sql)
             

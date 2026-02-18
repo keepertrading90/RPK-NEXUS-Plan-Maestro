@@ -1,8 +1,8 @@
 @echo off
-title RPK NEXUS - Centro de Control Unificado
+title RPK NEXUS HUB - Centro de Control
 setlocal
 
-:: Configuración de colores (RPK Style)
+:: Colores RPK (Fondo negro, texto rojo)
 color 0C
 
 echo ============================================================
@@ -10,36 +10,30 @@ echo        RPK NEXUS : PORTAL DE CONTROL INTELIGENTE
 echo ============================================================
 echo.
 
-:: 1. Sincronizar datos
-echo [PASO 1] Sincronizando datos unificados desde la red (Y:)...
-start /wait "" ".\_SISTEMA\runtime_python\python.exe" scripts/sync_nexus.py
+:: 1. Sincronizar datos (Rápido)
+echo [1/3] Sincronizando datos de produccion (Y: -> Local)...
+".\_SISTEMA\runtime_python\python.exe" scripts/sync_nexus.py
 
 if %ERRORLEVEL% NEQ 0 (
     echo.
-    echo ⚠️ ERROR: No se han podido sincronizar los datos.
-    echo Verifique su conexion a la unidad Y:
-    pause
-    exit /b
+    echo ⚠️ AVISO: Error en sincronizacion. Verifique conexion a Y:
+    echo Se intentara abrir el panel con los ultimos datos locales.
+    echo.
 )
 
-echo.
-echo [PASO 2] Lanzando Servidor Nexus Hub y Portal Web...
+:: 2. Lanzar Servidor y UI
+echo [2/3] Levantando Servidor Nexus Hub...
 echo.
 
-:: 2. Iniciar el servidor API y la UI en segundo plano
-:: El servidor abrirá la web en http://localhost:8000
-start "" ".\_SISTEMA\runtime_python\python.exe" backend/server_nexus.py
-
-:: 3. Abrir Navegador Automáticamente (pequeña espera para que el server suba)
-timeout /t 3 /nobreak > nul
+:: Abrir el navegador justo después de lanzar el servidor
 start http://localhost:8000
 
+:: Iniciar el servidor en la ventana actual (esto bloqueará el BAT para mantener el servicio)
+echo [3/3] PANEL ACTIVO en http://localhost:8000
 echo.
-echo NEXUS HUB esta activo en: http://localhost:8000
+echo Presione CTRL+C para apagar el servidor.
 echo.
-echo [PASO 3] Iniciando Asistente de Consultas CLI (Secundario)...
-echo.
-".\_SISTEMA\runtime_python\python.exe" backend/db/consultor.py
+".\_SISTEMA\runtime_python\python.exe" backend/server_nexus.py
 
 echo.
 echo ============================================================

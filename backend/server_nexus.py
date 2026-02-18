@@ -12,6 +12,8 @@ from fastapi.responses import FileResponse
 from pathlib import Path
 from pydantic import BaseModel
 from typing import List, Optional
+from backend.analytics_core import get_cobertura_global
+from backend.db.consultor import traducir_a_sql, ejecutar_consulta
 
 # Configuración de rutas
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -60,21 +62,35 @@ async def get_status():
 
 @app.get("/api/v1/analytics/cobertura")
 async def get_cobertura():
-    """Endpoint preliminar para analítica cruzada"""
-    # Aquí se integrará analytics_core.py en el futuro
-    return {"message": "Módulo de analítica en desarrollo"}
+    """Métricas reales de analítica cruzada"""
+    result = get_cobertura_global()
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+    return result
 
 @app.post("/api/v1/chat")
 async def chat_with_nexus(msg: Message):
-    """Endpoint para el asistente Gemini (Mock por ahora)"""
-    # En el futuro aquí invocaremos a Gemini
-    text = msg.text.lower()
-    if "stock" in text:
-        return {"response": "Consultando stock unificado... He encontrado 296 referencias en local."}
-    elif "tiempo" in text or "carga" in text:
-        return {"response": "Análisis de carga: Hay 27 centros reportando actividad actualmente."}
-    else:
-        return {"response": "Nexus está escuchando. ¿Qué necesitas saber sobre la producción?"}
+    """Asistente inteligente integrado con la BD Nexus"""
+    try:
+        sql = traducir_a_sql(msg.text)
+        resultados, columnas = ejecutar_consulta(sql)
+        
+        if not resultados:
+            return {"response": "No he encontrado datos específicos para esa consulta. Prueba con 'stock total' o 'carga de trabajo'."}
+        
+        # Formatear respuesta simple (primeros 5 resultados)
+        resp_text = f"He encontrado {len(resultados)} resultados. Aquí tienes el resumen:\n\n"
+        resp_text += " | ".join(columnas) + "\n"
+        resp_text += "-" * 30 + "\n"
+        for row in resultados[:5]:
+            resp_text += " | ".join(map(str, row)) + "\n"
+            
+        if len(resultados) > 5:
+            resp_text += f"\n... y {len(resultados) - 5} resultados más."
+            
+        return {"response": resp_text}
+    except Exception as e:
+        return {"response": f"Lo siento, ha ocurrido un error al consultar: {str(e)}"}
 
 if __name__ == "__main__":
     print(f"🚀 RPK NEXUS subiendo en http://localhost:8000")
