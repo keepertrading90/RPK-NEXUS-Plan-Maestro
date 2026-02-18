@@ -83,6 +83,22 @@ async def get_simulador_mod():
 app.mount("/mod", StaticFiles(directory=str(STATIC_DIR / "modules")), name="modules")
 app.mount("/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="assets")
 
+# --- REDIRECCIONES PARA ACTIVOS RELATIVOS ---
+@app.get("/mod/{mod_name}")
+async def redirect_to_mod_with_slash(mod_name: str, request: Request):
+    if not request.url.path.endswith("/"):
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=str(request.url).rstrip("/") + "/")
+    
+    # Si llega aquí con barra, servimos el index correspondiente
+    path = STATIC_DIR / "modules" / mod_name / "index.html"
+    if not path.exists():
+        path = STATIC_DIR / "modules" / mod_name / "ui" / "index.html"
+    
+    if path.exists():
+        return FileResponse(path)
+    raise HTTPException(status_code=404, detail="Module not found")
+
 # --- ENDPOINTS DE API - COMPATIBILIDAD Y DATOS ---
 
 @app.get("/api/v1/status")
@@ -209,10 +225,77 @@ async def get_stock_customers():
     return {"customers": [dict(r) for r in custs]}
 
 @app.get("/api/customer/{cliente_id}/items")
-async def get_customer_items(cliente_id: str):
+async def get_customer_items(cliente_id: str, fecha_inicio: str = None, fecha_fin: str = None):
     latest_date = query_db("SELECT MAX(Fecha) FROM stock_snapshot", one=True)[0]
-    items = query_db("SELECT Articulo, Descripcion, Cantidad, Valor_Total FROM stock_snapshot WHERE Cliente = ? AND Fecha = ? ORDER BY Valor_Total DESC", (cliente_id, latest_date))
-    return {"items": [dict(r) for r in items], "cliente": cliente_id, "fecha": latest_date}
+    
+    # Obtener artículos actuales
+    items = query_db("""
+        SELECT Articulo, Descripcion, Cantidad, Valor_Total, Stock_Objetivo 
+        FROM stock_snapshot 
+        WHERE Cliente = ? AND Fecha = ? 
+        ORDER BY Valor_Total DESC
+    """, (cliente_id, latest_date))
+    
+    # Calcular medias en el rango si se proporcionan
+    res_items = []
+    for item in items:
+        media_q = "SELECT AVG(Cantidad) as media_q, AVG(Valor_Total) as media_v FROM stock_snapshot WHERE Cliente = ? AND Articulo = ?"
+        params = [cliente_id, item['Articulo']]
+        if fecha_inicio:
+            media_q += " AND Fecha >= ?"
+            params.append(fecha_inicio)
+        if fecha_fin:
+            media_q += " AND Fecha <= ?"
+            params.append(fecha_fin)
+            
+        m = query_db(media_q, tuple(params), one=True)
+        
+        d = dict(item)
+        d['Media_Cantidad'] = m['media_q'] if m['media_q'] else d['Cantidad']
+        d['Media_Valor'] = m['media_v'] if m['media_v'] else d['Valor_Total']
+        res_items.append(d)
+        
+    return {
+        "items": res_items, 
+        "cliente": cliente_id, 
+        "fecha": latest_date,
+        "fecha_inicio": fecha_inicio or latest_date
+    }
+
+@app.get("/api/item/{item_id}/evolution")
+async def get_item_evolution(item_id: str, fecha_inicio: str = None, fecha_fin: str = None):
+    q = """
+        SELECT Fecha, Cantidad, Valor_Total, Stock_Objetivo, Descripcion 
+        FROM stock_snapshot 
+        WHERE Articulo = ?
+    """
+    params = [item_id]
+    if fecha_inicio:
+        q += " AND Fecha >= ?"
+        params.append(fecha_inicio)
+    if fecha_fin:
+        q += " AND Fecha <= ?"
+        params.append(fecha_fin)
+        
+    q += " ORDER BY Fecha"
+    
+    res = query_db(q, tuple(params))
+    if not res:
+        return {"fechas": [], "cantidades": [], "valores": [], "stock_objetivo": 0}
+    
+    return {
+        "articulo": item_id,
+        "descripcion": res[0]['Descripcion'],
+        "fechas": [r['Fecha'] for r in res],
+        "cantidades": [r['Cantidad'] for r in res],
+        "valores": [r['Valor_Total'] for r in res],
+        "stock_objetivo": res[-1]['Stock_Objetivo'] if res[-1]['Stock_Objetivo'] else 0
+    }
+
+@app.get("/api/debug/objectives")
+async def debug_objectives():
+    res = query_db("SELECT Articulo, Stock_Objetivo FROM stock_snapshot WHERE Stock_Objetivo > 0 LIMIT 20")
+    return {"objectives_sample": [dict(r) for r in res]}
 
 # --- ENDPOINTS ESPECIFICOS DE TIEMPOS ---
 
