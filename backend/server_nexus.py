@@ -142,7 +142,7 @@ async def get_module_index(mod_name: str, request: Request):
             return JSONResponse({"error": f"Modulo {mod_name} no encontrado"}, status_code=404)
             
     print(f"[DEBUG] Sirviendo modulo {mod_name} desde: {path.absolute()}")
-    return FileResponse(path)
+    return FileResponse(path, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 # Montar directorios estáticos para los activos de los módulos
 app.mount("/mod", StaticFiles(directory=str(STATIC_DIR / "modules")), name="modules")

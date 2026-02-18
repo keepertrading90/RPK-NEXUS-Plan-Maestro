@@ -9,13 +9,12 @@ from typing import List
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EXCEL_PATH = os.path.join(BASE_DIR, "db", "MAESTRO FLEJE_v1.xlsx")
 
-# El import de database se hará dinámicamente o apuntará a backend.db.models_sim
-# Para evitar dependencias circulares y facilitar la integración en server_nexus
 try:
     from backend.db import models_sim as database
 except ImportError:
-    # Esto se resolverá cuando creemos el archivo
-    database = None
+    import sys
+    sys.path.append(os.path.dirname(BASE_DIR))
+    from backend.db import models_sim as database
 
 print(f"DEBUG:simulation_core: Usando EXCEL_PATH = {EXCEL_PATH}", flush=True)
 
@@ -29,7 +28,7 @@ def time_it(func):
         start_time = time.perf_counter()
         result = func(*args, **kwargs)
         end_time = time.perf_counter()
-        print(f"[PERF] {func.__name__} tardo {end_time - start_time:.4f} segundos")
+        print(f"⏱️ [PERF] {func.__name__} tardó {end_time - start_time:.4f} segundos")
         return result
     return wrapper
 
@@ -49,18 +48,17 @@ def get_base_dataframe():
 
     try:
         if use_cache:
-            print(f"[INFO] Cargando desde cache binaria (Modo Ultra Rapido)...", flush=True)
+            print(f"🚀 Cargando desde caché binaria (Modo Ultra Rápido)...", flush=True)
             start_load = time.perf_counter()
             _df_cache = pd.read_pickle(CACHE_PATH)
             end_load = time.perf_counter()
-            print(f"[INFO] Cache cargada en {end_load - start_load:.4f} segundos.", flush=True)
+            print(f"✅ Caché cargada en {end_load - start_load:.4f} segundos.", flush=True)
         else:
-            print(f"[INFO] Cargando Excel Maestro por primera vez desde: {EXCEL_PATH}...", flush=True)
+            print(f"🚀 Cargando Excel Maestro por primera vez desde: {EXCEL_PATH}...", flush=True)
             if not os.path.exists(EXCEL_PATH):
                 raise FileNotFoundError(f"No se encuentra el archivo maestro en: {EXCEL_PATH}")
             
             start_load = time.perf_counter()
-            # Usar 'calamine' o 'openpyxl' si están disponibles, sino por defecto
             _df_cache = pd.read_excel(EXCEL_PATH)
             
             # Limpieza básica inicial
@@ -69,14 +67,14 @@ def get_base_dataframe():
             _df_cache = _df_cache[~_df_cache['Centro'].isin(['nan', 'NaN', 'None', '', 'nan.0'])].copy()
             
             end_load = time.perf_counter()
-            print(f"[INFO] Excel cargado en {end_load - start_load:.4f} segundos.", flush=True)
+            print(f"✅ Excel cargado en {end_load - start_load:.4f} segundos.", flush=True)
             
             # Guardar caché para la próxima vez
-            print(f"[INFO] Generando cache binaria para acelerar futuros arranques...", flush=True)
+            print(f"🔄 Generando caché binaria para acelerar futuros arranques...", flush=True)
             _df_cache.to_pickle(CACHE_PATH)
             
     except Exception as e:
-        print(f"[ERROR] Error al cargar DataFrame maestro: {e}")
+        print(f"❌ Error al cargar DataFrame maestro: {e}")
         return None
 
     # Asegurar que centro_original existe (por si la caché es vieja)
@@ -87,20 +85,28 @@ def get_base_dataframe():
 
 @time_it
 def calculate_saturation(df: pd.DataFrame, dias_laborales_override: int = None, horas_turno_default: int = 16):
+    """
+    Calcula la saturación basada en las columnas del Excel.
+    """
+    
     # Aseguramos tipos de datos
     df['Volumen anual'] = pd.to_numeric(df['Volumen anual'], errors='coerce').fillna(0)
     df['Piezas por minuto'] = pd.to_numeric(df['Piezas por minuto'], errors='coerce').fillna(0)
     df['%OEE'] = pd.to_numeric(df['%OEE'], errors='coerce').fillna(0)
     
+    # Aseguramos que existe la columna horas_turno (puede venir pre-configurada con overrides)
     if 'horas_turno' not in df.columns:
         df['horas_turno'] = horas_turno_default
     
+    # Usar override si existe, sino columna del excel, sino default 238
     if dias_laborales_override is not None:
         df['dias laborales 2026'] = dias_laborales_override
     else:
         df['dias laborales 2026'] = pd.to_numeric(df['dias laborales 2026'], errors='coerce').fillna(238)
 
+    # Aseguramos que existe la columna de setup (puede venir del Excel o ser 0)
     if 'Setup (h)' not in df.columns:
+        # Intentar buscar nombres alternativos
         for col in ['Setup', 'Preparacion', 'Tiempo Preparacion']:
             if col in df.columns:
                 df['Setup (h)'] = pd.to_numeric(df[col], errors='coerce').fillna(0)
@@ -110,6 +116,8 @@ def calculate_saturation(df: pd.DataFrame, dias_laborales_override: int = None, 
     else:
         df['Setup (h)'] = pd.to_numeric(df['Setup (h)'], errors='coerce').fillna(0)
 
+    # --- NUEVA LÓGICA MOD (PERSONAL) ---
+    # 1. Buscar columna en Excel
     if 'Ratio_MOD' not in df.columns:
         for col in ['Ratio MOD', 'Ratio Persona Maquina', 'Ratio Persona Articulo', 'MOD']:
             if col in df.columns:
@@ -120,23 +128,36 @@ def calculate_saturation(df: pd.DataFrame, dias_laborales_override: int = None, 
     else:
         df['Ratio_MOD'] = pd.to_numeric(df['Ratio_MOD'], errors='coerce').fillna(1.0)
 
+    # El Ratio_MOD ya puede venir con pre-overrides de centro o articulo en get_simulation_data
+
+    # Cálculos dinámicos
     df['Piezas por hora'] = df['Piezas por minuto'] * 60
     
+    # Manejo de OEE: Si viene como 70 en lugar de 0.70, normalizamos
+    # (Asumimos que si hay valores > 1, es escala 0-100)
     oee_mask = df['%OEE'] > 1.1
     df_oee_calc = df['%OEE'].copy()
     if oee_mask.any():
         df_oee_calc = df_oee_calc.apply(lambda x: x/100.0 if x > 1.1 else x)
 
+    # Calculamos horas totales requeridas (Producción + Setup)
+    # Evitamos división por cero asegurando que PPH y OEE sean > 0
     denominador = (df['Piezas por hora'] * df_oee_calc)
     df['Horas_Produccion'] = (df['Volumen anual'] / denominador).replace([float('inf'), -float('inf')], 0).fillna(0)
     df['Horas_Totales'] = df['Horas_Produccion'] + df['Setup (h)']
     
+    # --- CÁLCULO HORAS HOMBRE (MOD) ---
+    # Las horas de preparación (Setup) siempre tienen ratio 1.0 según requerimiento.
+    # El Ratio_MOD solo afecta a las horas de producción pura.
     df['Horas_Hombre'] = (df['Horas_Produccion'] * df['Ratio_MOD'].fillna(1.0)) + df['Setup (h)']
     
+    # Capacidad Anual en Horas
     df['Capacidad_Anual_H'] = df['dias laborales 2026'] * df['horas_turno']
     
+    # % Saturación
     df['Saturacion'] = (df['Horas_Totales'] / df['Capacidad_Anual_H']).replace([float('inf'), -float('inf')], 0).fillna(0)
 
+    # --- CÁLCULO IMPACTO (Peso del artículo sobre el total) ---
     total_horas_global = df['Horas_Totales'].sum()
     if total_horas_global > 0:
         df['Impacto'] = df['Horas_Totales'] / total_horas_global
@@ -147,13 +168,14 @@ def calculate_saturation(df: pd.DataFrame, dias_laborales_override: int = None, 
 
 @time_it
 def get_simulation_data(db: Session, scenario_id: int = None, dias_laborales: int = None, overrides_list: List = None, horas_turno: int = None, center_configs: dict = None):
+    # En lugar de pd.read_excel, usamos la caché
     df = get_base_dataframe()
-    if df is None:
-        raise Exception("No se pudo cargar el DataFrame maestro.")
-        
+    
+    # Asegurar que horas_turno es entero
     h_turno = int(horas_turno) if horas_turno is not None else 16
     df['horas_turno'] = h_turno
     
+    # Aplicar configuraciones por centro si existen
     if center_configs:
         for centro, config in center_configs.items():
             mask_c = df['Centro'].astype(str) == str(centro)
@@ -164,12 +186,14 @@ def get_simulation_data(db: Session, scenario_id: int = None, dias_laborales: in
                     df.loc[mask_c, 'Ratio_MOD'] = float(config['personnel_ratio'])
     
     selected_overrides = []
-    if scenario_id and database:
+    if scenario_id:
         selected_overrides = db.query(database.ScenarioDetail).filter(database.ScenarioDetail.scenario_id == scenario_id).all()
     elif overrides_list:
         selected_overrides = overrides_list
 
     for ov in selected_overrides:
+        # Pydantic models (de server.py) o SQLAlchemy objects tienen atributos similares
+        # Si es un dict (de un payload POST), usamos get, si es objeto usamos getattr
         art = getattr(ov, 'articulo', None) or (ov.articulo if hasattr(ov, 'articulo') else None)
         cen = getattr(ov, 'centro', None) or (ov.centro if hasattr(ov, 'centro') else None)
         
@@ -186,18 +210,15 @@ def get_simulation_data(db: Session, scenario_id: int = None, dias_laborales: in
         if dem is not None: df.loc[mask, 'Volumen anual'] = dem
         if nc is not None: df.loc[mask, 'Centro'] = nc
         if ht is not None: df.loc[mask, 'horas_turno'] = ht
-        if (hasattr(ov, 'personnel_ratio_override') and ov.personnel_ratio_override is not None) or \
-           (isinstance(ov, dict) and ov.get('personnel_ratio_override') is not None):
-            val = getattr(ov, 'personnel_ratio_override', None) or ov.get('personnel_ratio_override')
-            df.loc[mask, 'Ratio_MOD'] = val
-        if (hasattr(ov, 'setup_time_override') and getattr(ov, 'setup_time_override', None) is not None) or \
-           (isinstance(ov, dict) and ov.get('setup_time_override') is not None):
-            val = getattr(ov, 'setup_time_override', None) or ov.get('setup_time_override')
-            df.loc[mask, 'Setup (h)'] = val
+        if hasattr(ov, 'personnel_ratio_override') and ov.personnel_ratio_override is not None:
+            df.loc[mask, 'Ratio_MOD'] = ov.personnel_ratio_override
+        if getattr(ov, 'setup_time_override', None) is not None: 
+            df.loc[mask, 'Setup (h)'] = ov.setup_time_override
 
     d_lab = int(dias_laborales) if dias_laborales is not None else None
     df = calculate_saturation(df, d_lab, h_turno)
     
+    # Agrupación por Centro para el resumen de saturación
     centro_summary = df.groupby('Centro').agg({
         'Saturacion': 'sum',
         'Volumen anual': 'sum',
@@ -207,6 +228,8 @@ def get_simulation_data(db: Session, scenario_id: int = None, dias_laborales: in
     }).reset_index()
     
     centro_summary.rename(columns={'Articulo': 'Num_Articulos'}, inplace=True)
+    
+    # Asegurar que no hay NaNs ni Valores Infinitos que rompan el JSON
     df = df.fillna(0).replace([float('inf'), -float('inf')], 0)
     centro_summary = centro_summary.fillna(0).replace([float('inf'), -float('inf')], 0)
 
@@ -219,15 +242,15 @@ def get_simulation_data(db: Session, scenario_id: int = None, dias_laborales: in
             "center_configs": center_configs or {},
             "applied_overrides": [
                 {
-                    "articulo": getattr(ov, 'articulo', None) or (ov.articulo if isinstance(ov, dict) else None),
-                    "centro": getattr(ov, 'centro', None) or (ov.centro if isinstance(ov, dict) else None),
-                    "oee_override": getattr(ov, 'oee_override', None) or (ov.get('oee_override') if isinstance(ov, dict) else None),
-                    "ppm_override": getattr(ov, 'ppm_override', None) or (ov.get('ppm_override') if isinstance(ov, dict) else None),
-                    "demanda_override": getattr(ov, 'demanda_override', None) or (ov.get('demanda_override') if isinstance(ov, dict) else None),
-                    "new_centro": getattr(ov, 'new_centro', None) or (ov.get('new_centro') if isinstance(ov, dict) else None),
-                    "horas_turno_override": getattr(ov, 'horas_turno_override', None) or (ov.get('horas_turno_override') if isinstance(ov, dict) else None),
-                    "personnel_ratio_override": getattr(ov, 'personnel_ratio_override', None) or (ov.get('personnel_ratio_override') if isinstance(ov, dict) else None),
-                    "setup_time_override": getattr(ov, 'setup_time_override', None) or (ov.get('setup_time_override') if isinstance(ov, dict) else None)
+                    "articulo": getattr(ov, 'articulo', None) or (ov.articulo if hasattr(ov, 'articulo') else None),
+                    "centro": getattr(ov, 'centro', None) or (ov.centro if hasattr(ov, 'centro') else None),
+                    "oee_override": getattr(ov, 'oee_override', None),
+                    "ppm_override": getattr(ov, 'ppm_override', None),
+                    "demanda_override": getattr(ov, 'demanda_override', None),
+                    "new_centro": getattr(ov, 'new_centro', None),
+                    "horas_turno_override": getattr(ov, 'horas_turno_override', None),
+                    "personnel_ratio_override": getattr(ov, 'personnel_ratio_override', None),
+                    "setup_time_override": getattr(ov, 'setup_time_override', None)
                 } for ov in selected_overrides
             ] if selected_overrides else []
         }
