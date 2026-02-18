@@ -18,8 +18,14 @@ if str(BASE_DIR) not in sys.path:
     sys.path.append(str(BASE_DIR))
 from pydantic import BaseModel
 from typing import List, Optional
+import pandas as pd
+from datetime import datetime
 from backend.analytics_core import get_cobertura_global
 from backend.db.consultor import traducir_a_sql, ejecutar_consulta
+
+# Rutas de Red para compatibilidad
+STOCK_EXCEL = Path(r"\\RPK4TGN\ofimatica\Supply Chain\PLAN PRODUCCION\PANEL\_PROYECTOS\DASHBOARD_STOCK\backend\RESUMEN_STOCK.xlsx")
+TIEMPOS_EXCEL = Path(r"\\RPK4TGN\ofimatica\Supply Chain\PLAN PRODUCCION\PANEL\_PROYECTOS\DASHBOARD_TIEMPOS\ANALISIS_MENSUAL_TIEMPOS_V2.xlsx")
 
 # Configuración de rutas
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -28,8 +34,13 @@ STATIC_DIR = BASE_DIR / "frontend"
 
 app = FastAPI(title="RPK NEXUS API")
 
-# Montar archivos estáticos
+# Montar archivos estáticos del Hub
 app.mount("/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="assets")
+
+# Montar directorios de módulos (Activos)
+app.mount("/mod/stock/static", StaticFiles(directory=str(STATIC_DIR / "modules" / "stock")), name="stock_static")
+app.mount("/mod/tiempos/static", StaticFiles(directory=str(STATIC_DIR / "modules" / "tiempos")), name="tiempos_static")
+app.mount("/mod/simulador/static", StaticFiles(directory=str(STATIC_DIR / "modules" / "simulador")), name="simulador_static")
 
 # Modelos
 class Message(BaseModel):
@@ -39,6 +50,23 @@ class Message(BaseModel):
 @app.get("/")
 async def get_index():
     return FileResponse(STATIC_DIR / "ui" / "index.html")
+
+@app.get("/mod/stock")
+async def get_stock_mod():
+    return FileResponse(STATIC_DIR / "modules" / "stock" / "index.html")
+
+@app.get("/mod/tiempos")
+async def get_tiempos_mod():
+    # El dashboard de tiempos tiene el index en ui/index.html usualmente
+    path = STATIC_DIR / "modules" / "tiempos" / "ui" / "index.html"
+    if not path.exists(): path = STATIC_DIR / "modules" / "tiempos" / "index.html"
+    return FileResponse(path)
+
+@app.get("/mod/simulador")
+async def get_simulador_mod():
+    path = STATIC_DIR / "modules" / "simulador" / "index.html"
+    if not path.exists(): path = STATIC_DIR / "modules" / "simulador" / "ui" / "index.html"
+    return FileResponse(path)
 
 # Endpoints de Datos
 @app.get("/api/v1/status")
@@ -66,13 +94,34 @@ async def get_status():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/v1/analytics/cobertura")
-async def get_cobertura():
-    """Métricas reales de analítica cruzada"""
-    result = get_cobertura_global()
-    if "error" in result:
-        raise HTTPException(status_code=500, detail=result["error"])
-    return result
+# --- ENDPOINTS COMPATIBILIDAD STOCK ---
+@app.get("/api/fechas")
+async def get_stock_dates(refresh: bool = False):
+    try:
+        xl = pd.ExcelFile(STOCK_EXCEL)
+        df_ev = xl.parse('Evolucion_Diaria')
+        fechas = sorted(pd.to_datetime(df_ev['Fecha']).dt.strftime('%Y-%m-%d').unique())
+        return {"fecha_min": fechas[0], "fecha_max": fechas[-1], "fechas": fechas}
+    except: return {"error": "No se pudo leer el Excel de Stock"}
+
+@app.get("/api/summary")
+async def get_stock_summary(fecha_inicio: str = None, fecha_fin: str = None):
+    try:
+        xl = pd.ExcelFile(STOCK_EXCEL)
+        df_det = xl.parse('Datos_Detalle')
+        df_ev = xl.parse('Evolucion_Diaria')
+        df_det['Fecha'] = pd.to_datetime(df_det['Fecha']).dt.strftime('%Y-%m-%d')
+        df_ev['Fecha'] = pd.to_datetime(df_ev['Fecha']).dt.strftime('%Y-%m-%d')
+        latest = df_ev['Fecha'].max()
+        df_l = df_det[df_det['Fecha'] == latest]
+        return {
+            "kpis": {"valor_total": float(df_l['Valor_Total'].sum()), "num_items": int(df_l['Articulo'].nunique()), "num_clientes": int(df_l['Cliente'].nunique())},
+            "evolucion_total": {"fechas": df_ev['Fecha'].tolist(), "valores": df_ev['Valor_Total'].tolist()},
+            "top_customers": df_l.groupby('Cliente')['Valor_Total'].sum().nlargest(5).reset_index().to_dict(orient='records'),
+            "top_items": df_l.groupby(['Articulo','Descripcion']).agg({'Valor_Total':'sum','Cantidad':'sum'}).nlargest(100,'Valor_Total').reset_index().to_dict(orient='records'),
+            "ultima_fecha": latest
+        }
+    except: return {"error": "Error cargando summary de stock"}
 
 @app.post("/api/v1/chat")
 async def chat_with_nexus(msg: Message):

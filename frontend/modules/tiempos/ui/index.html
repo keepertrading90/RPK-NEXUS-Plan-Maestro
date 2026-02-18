@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RPK | Análisis de Tiempos</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+        rel="stylesheet">
+    <!-- Icons (Lucide) -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Charts (Chart.js) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="/static/ui/styles.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-logo">
+                <img src="/static/assets/rpk_logo.png" alt="RPK Group Logo"
+                    onerror="this.src='https://rpk.es/images/logo-rpk-group.svg'">
+            </div>
+
+            <nav class="nav-menu">
+                <span class="nav-label">Módulos</span>
+                <div class="nav-item">
+                    <a href="#" class="nav-link active" data-tab="dashboard">
+                        <i data-lucide="layout-dashboard"></i>
+                        <span>Resumen General</span>
+                    </a>
+                </div>
+                <div class="nav-item">
+                    <a href="#" class="nav-link" data-tab="evolution">
+                        <i data-lucide="trending-up"></i>
+                        <span>Análisis Evolutivo</span>
+                    </a>
+                </div>
+                <div class="nav-item">
+                    <a href="#" class="nav-link" data-tab="ranking">
+                        <i data-lucide="bar-chart-2"></i>
+                        <span>Ranking Centros</span>
+                    </a>
+                </div>
+
+                <span class="nav-label" style="margin-top: 2.5rem;">Configuración</span>
+                <div class="nav-item">
+                    <a href="#" class="nav-link" data-tab="settings">
+                        <i data-lucide="settings"></i>
+                        <span>Preferencias</span>
+                    </a>
+                </div>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="status-indicator">
+                    <div class="dot" id="system-status"></div>
+                    <span id="status-text">Sistema Online</span>
+                </div>
+                <p style="margin-top: 0.5rem;">v2.0.0 Refactor</p>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header Section -->
+            <header class="page-header">
+                <div class="header-title">
+                    <h1 id="page-title">Dashboard Operativo</h1>
+                    <span id="page-subtitle">Monitoreo de carga y tiempos de producción por centro</span>
+                </div>
+                <div class="action-bar">
+                    <div class="filter-pill">
+                        <i data-lucide="calendar"></i>
+                        <input type="date" id="date-from" class="date-selector" title="Fecha Inicio">
+                        <span style="color: var(--text-muted);">→</span>
+                        <input type="date" id="date-to" class="date-selector" title="Fecha Fin">
+                    </div>
+                    <button class="btn-rpk" id="btn-refresh">
+                        <i data-lucide="rotate-cw"></i>
+                        <span>Actualizar</span>
+                    </button>
+                    <button class="btn-rpk" id="btn-export"
+                        style="background: var(--surface-glass); border: 1px solid var(--border-glass);">
+                        <i data-lucide="download"></i>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Dashboard View -->
+            <section id="tab-dashboard" class="tab-content active">
+                <div class="kpi-grid">
+                    <div class="glass-card kpi-card">
+                        <span class="kpi-label">Carga Total Acumulada</span>
+                        <div class="kpi-value">
+                            <span id="kpi-total-carga">0</span>
+                            <span class="kpi-unit">Horas</span>
+                        </div>
+                        <div class="kpi-trend trend-up">
+                            <i data-lucide="arrow-up-right"></i>
+                            <span>4.2% vs periodo anterior</span>
+                        </div>
+                    </div>
+                    <div class="glass-card kpi-card">
+                        <span class="kpi-label">Media Carga Diaria</span>
+                        <div class="kpi-value">
+                            <span id="kpi-media-carga">0</span>
+                            <span class="kpi-unit">H/Día</span>
+                        </div>
+                        <div class="kpi-trend" style="color: var(--text-muted);">
+                            <i data-lucide="minus"></i>
+                            <span>Estable</span>
+                        </div>
+                    </div>
+                    <div class="glass-card kpi-card">
+                        <span class="kpi-label">Centros Activos</span>
+                        <div class="kpi-value">
+                            <span id="kpi-centros">0</span>
+                            <span class="kpi-unit">Centros</span>
+                        </div>
+                        <div class="kpi-trend trend-down">
+                            <i data-lucide="alert-circle"></i>
+                            <span>2 centros sin carga hoy</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-layout">
+                    <!-- Column 1: Charts -->
+                    <div class="glass-card chart-container">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <i data-lucide="area-chart"></i>
+                                <span>Evolución de Carga (Global vs Centros Top)</span>
+                            </div>
+                            <div class="chart-legend" id="chart-legend-container"></div>
+                        </div>
+                        <div style="height: 400px; position: relative;">
+                            <canvas id="mainChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Column 2: Quick Ranking -->
+                    <div class="glass-card">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <i data-lucide="list-ordered"></i>
+                                <span>Media por Centro (h)</span>
+                            </div>
+                        </div>
+                        <div class="data-table-container">
+                            <table class="modern-table">
+                                <thead>
+                                    <tr>
+                                        <th>Centro</th>
+                                        <th>Carga Total (h)</th>
+                                        <th class="text-right">Media</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="mini-ranking-body">
+                                    <!-- Dynamic content -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Evolution View -->
+            <section id="tab-evolution" class="tab-content" style="display: none;">
+                <div class="glass-card" style="margin-bottom: 2rem;">
+                    <div class="card-header">
+                        <div class="card-title">Selección Multi-Centro</div>
+                        <div class="filter-pill" style="padding: 0.4rem 0.8rem;">
+                            <i data-lucide="search" style="width: 14px;"></i>
+                            <input type="text" id="centro-search" placeholder="Filtrar por ID..."
+                                style="background:transparent; border:none; color:white; font-size: 0.8rem; width: 100px;">
+                        </div>
+                    </div>
+                    <div id="centro-chips-container" style="display: flex; flex-wrap: wrap; gap: 0.8rem;">
+                        <!-- Centros as toggleable chips -->
+                    </div>
+                </div>
+                <div class="glass-card chart-container">
+                    <canvas id="comparisonChart"></canvas>
+                </div>
+            </section>
+
+            <!-- Ranking View -->
+            <section id="tab-ranking" class="tab-content" style="display: none;">
+                <div class="glass-card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <i data-lucide="list-ordered"></i>
+                            <span>Ranking de Saturación por Centro</span>
+                        </div>
+                    </div>
+                    <div class="data-table-container">
+                        <table class="modern-table">
+                            <thead>
+                                <tr>
+                                    <th>Centro</th>
+                                    <th>Carga Total (h)</th>
+                                    <th>Media Diaria</th>
+                                    <th>Días Activos</th>
+                                    <th>Obs.</th>
+                                </tr>
+                            </thead>
+                            <tbody id="full-ranking-body">
+                                <!-- Dynamic content -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+
+        <!-- Drill-down Modal -->
+        <div id="drilldown-overlay" class="overlay">
+            <div class="glass-card modal-content" id="drilldown-card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <i data-lucide="box"></i>
+                        <span id="drilldown-title">Desglose de Artículos</span>
+                    </div>
+                    <button class="btn-rpk" id="close-modal" style="background:transparent; padding: 0.5rem;">
+                        <i data-lucide="x"></i>
+                    </button>
+                </div>
+                <div class="data-table-container">
+                    <table class="modern-table">
+                        <thead>
+                            <tr>
+                                <th>Artículo</th>
+                                <th>O.F.</th>
+                                <th>Horas</th>
+                                <th>Días</th>
+                                <th>Impacto</th>
+                            </tr>
+                        </thead>
+                        <tbody id="drilldown-body">
+                            <!-- Dynamic content -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/static/ui/app.js"></script>
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+    </script>
+</body>
+
+</html>

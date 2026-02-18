@@ -1,0 +1,1125 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RPK | Dashboard de Existencias</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --rpk-red: #E30613;
+            --rpk-red-dark: #B00510;
+            --dark-bg: #121212;
+            --dark-surface: #1E1E1E;
+            --dark-surface-2: #2A2A2A;
+            --text-main: #FFFFFF;
+            --text-muted: #B0B0B0;
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--dark-bg);
+            color: var(--text-main);
+        }
+
+        .dashboard-container {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            width: 240px;
+            background-color: var(--dark-surface);
+            border-right: 1px solid var(--glass-border);
+            padding: 2rem 1.5rem;
+            position: fixed;
+            height: 100vh;
+        }
+
+        .logo-container {
+            margin-bottom: 3rem;
+            text-align: center;
+        }
+
+        .logo-container img {
+            max-width: 140px;
+            height: auto;
+        }
+
+        .nav-item {
+            padding: 1rem;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            color: var(--text-muted);
+            font-weight: 500;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .nav-item:hover {
+            background-color: var(--dark-surface-2);
+            color: var(--text-main);
+            transform: translateX(5px);
+        }
+
+        .nav-item.active {
+            background-color: var(--rpk-red);
+            color: white;
+            box-shadow: 0 4px 15px rgba(227, 6, 19, 0.3);
+        }
+
+        .main-content {
+            flex: 1;
+            margin-left: 240px;
+            padding: 2rem 3rem;
+        }
+
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2.5rem;
+        }
+
+        .page-header h1 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+
+        .date-badge {
+            background: var(--glass-bg);
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            border: 1px solid var(--glass-border);
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            backdrop-filter: blur(5px);
+        }
+
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+            margin-bottom: 2.5rem;
+        }
+
+        .kpi-card {
+            background: var(--dark-surface);
+            padding: 1.5rem;
+            border-radius: 16px;
+            border: 1px solid var(--glass-border);
+            transition: transform 0.3s;
+        }
+
+        .kpi-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--rpk-red);
+        }
+
+        .kpi-label {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 0.5rem;
+        }
+
+        .kpi-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        .chart-box {
+            background: var(--dark-surface);
+            padding: 1.5rem;
+            border-radius: 16px;
+            border: 1px solid var(--glass-border);
+            margin-bottom: 1.5rem;
+        }
+
+        .chart-box h3 {
+            font-size: 1rem;
+            color: var(--text-muted);
+            margin-bottom: 1.5rem;
+            font-weight: 600;
+        }
+
+        .ranking-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        .ranking-table th {
+            text-align: left;
+            padding: 1rem;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--glass-border);
+            font-size: 0.85rem;
+        }
+
+        .ranking-table td {
+            padding: 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            font-size: 0.9rem;
+        }
+
+        .row-expandable {
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .row-expandable:hover {
+            background: rgba(227, 6, 19, 0.05);
+        }
+
+        .expand-icon {
+            display: inline-block;
+            transition: transform 0.3s;
+            margin-right: 10px;
+            color: var(--rpk-red);
+            font-size: 0.7rem;
+        }
+
+        .expanded .expand-icon {
+            transform: rotate(90deg);
+        }
+
+        .child-row {
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .article-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+            padding: 1rem;
+        }
+
+        .article-table th {
+            background: var(--dark-surface-2);
+            padding: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .article-table td {
+            padding: 0.75rem;
+            color: var(--text-main);
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--dark-bg);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+
+        .loader {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #333;
+            border-top-color: var(--rpk-red);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .filter-bar {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            background: var(--dark-surface);
+            padding: 1rem;
+            border-radius: 12px;
+            border: 1px solid var(--glass-border);
+            align-items: center;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .filter-label {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        input[type="date"] {
+            background: var(--dark-surface-2);
+            border: 1px solid var(--glass-border);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-family: inherit;
+        }
+
+        .btn {
+            background: var(--rpk-red);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .btn:hover {
+            background: var(--rpk-red-dark);
+            transform: scale(1.02);
+        }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(10px);
+            z-index: 10000;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .modal-content {
+            background: var(--dark-surface);
+            width: 90%;
+            max-width: 1000px;
+            padding: 2.5rem;
+            border-radius: 20px;
+            border: 1px solid var(--glass-border);
+            position: relative;
+            animation: modalFadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        @keyframes modalFadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .close-modal {
+            position: absolute;
+            top: 1.5rem;
+            right: 1.5rem;
+            font-size: 1.5rem;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .close-modal:hover {
+            color: var(--rpk-red);
+        }
+
+        .modal-header {
+            margin-bottom: 2rem;
+        }
+
+        .modal-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .modal-subtitle {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .item-clickable {
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .item-clickable:hover {
+            background: rgba(227, 6, 19, 0.15) !important;
+            color: var(--rpk-red);
+        }
+
+        .search-box {
+            position: relative;
+            margin-bottom: 1rem;
+        }
+
+        .search-input {
+            width: 100%;
+            background: var(--dark-surface-2);
+            border: 1px solid var(--glass-border);
+            color: white;
+            padding: 10px 15px 10px 35px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            transition: all 0.3s;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--rpk-red);
+            box-shadow: 0 0 0 2px rgba(227, 6, 19, 0.2);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="loader" class="loading-overlay">
+        <div class="loader"></div>
+    </div>
+
+    <div class="dashboard-container">
+        <aside class="sidebar">
+            <div class="logo-container">
+                <img src="rpk_logo.png" alt="RPK Group Logo" onerror="this.src='https://rpk.es/images/logo-rpk.png'">
+            </div>
+            <nav>
+                <div class="nav-item active" data-section="summary">📊 Resumen General</div>
+                <div class="nav-item" data-section="ranking">📦 Análisis por Artículo</div>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <div id="section-summary" class="section">
+                <div class="page-header">
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <h1>Control de Existencias</h1>
+                        <button class="btn"
+                            style="padding: 4px 8px; background: transparent; border: 1px solid var(--glass-border); font-size: 1.2rem;"
+                            onclick="refreshAllData()" title="Refrescar datos del Excel">🔄</button>
+                    </div>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <a href="/api/debug/objectives" target="_blank"
+                            style="font-size: 0.7rem; color: var(--text-muted); text-decoration: none; border: 1px solid rgba(255,255,255,0.1); padding: 2px 5px; border-radius: 3px;">Debug
+                            Obj</a>
+                        <div class="date-badge" id="last-update">Último Dato: --</div>
+                    </div>
+                </div>
+
+                <div class="filter-bar">
+                    <div class="filter-group">
+                        <span class="filter-label">Desde</span>
+                        <input type="date" id="date-start">
+                    </div>
+                    <div class="filter-group">
+                        <span class="filter-label">Hasta</span>
+                        <input type="date" id="date-end">
+                    </div>
+                    <button class="btn" onclick="applyFilters()">Aplicar Filtro</button>
+                </div>
+
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-label">Valor Total Stock</div>
+                        <div class="kpi-value" id="kpi-total">€0</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Artículos Únicos</div>
+                        <div class="kpi-value" id="kpi-items">0</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Total Clientes</div>
+                        <div class="kpi-value" id="kpi-customers">0</div>
+                    </div>
+                </div>
+
+                <div class="chart-box">
+                    <h3>Evolución del Valor de Stock</h3>
+                    <canvas id="trendChart" height="100"></canvas>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1.5fr 1fr; gap: 1.5rem;">
+                    <div class="chart-box">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                            <h3>Top 15 Artículos por Valor</h3>
+                            <span style="font-size: 0.75rem; color: var(--text-muted);">Total Artículos: <span
+                                    id="item-count-badge">--</span></span>
+                        </div>
+                        <div class="search-box">
+                            <span class="search-icon">🔍</span>
+                            <input type="text" id="search-top-items" class="search-input"
+                                placeholder="Buscar artículo o descripción..." onkeyup="filterTopItems()">
+                        </div>
+                        <table class="ranking-table" style="font-size: 0.75rem;">
+                            <thead>
+                                <tr>
+                                    <th>Artículo</th>
+                                    <th>Descripción</th>
+                                    <th>Cant.</th>
+                                    <th style="color: #3B5924">Obj.</th>
+                                    <th>Valor (EUR)</th>
+                                    <th>Cuota %</th>
+                                </tr>
+                            </thead>
+                            <tbody id="top-items-body"></tbody>
+                        </table>
+                    </div>
+                    <div class="chart-box">
+                        <h3>Distribución de Stock (% y Valor)</h3>
+                        <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1rem;">Cuota de los
+                            clientes principales sobre el total.</p>
+                        <canvas id="customerChart" style="max-height: 180px; margin-bottom: 1.5rem;"></canvas>
+                        <div id="customer-distribution-list" style="display: flex; flex-direction: column; gap: 12px;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="section-ranking" class="section" style="display:none;">
+                <div class="page-header">
+                    <h1>Análisis por Artículo</h1>
+                </div>
+
+                <div class="filter-bar">
+                    <div class="filter-group">
+                        <span class="filter-label">Desde</span>
+                        <input type="date" id="date-ranking-start">
+                    </div>
+                    <div class="filter-group">
+                        <span class="filter-label">Hasta</span>
+                        <input type="date" id="date-ranking-end">
+                    </div>
+                    <button class="btn" onclick="updateRankingSection()">Aplicar Filtro</button>
+                    <button class="btn" style="background:#444" onclick="resetRankingFilters()">Eliminar
+                        Filtros</button>
+                </div>
+
+                <div class="chart-box">
+                    <div class="search-box">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="search-clients" class="search-input" placeholder="Buscar cliente..."
+                            onkeyup="filterRankingTable()">
+                    </div>
+                    <table class="ranking-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Cliente / Grupo</th>
+                                <th>Valor Total (EUR)</th>
+                                <th>Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ranking-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal para Evolución de Artículo -->
+    <div id="itemModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeModal()">&times;</span>
+            <div class="modal-header">
+                <div class="modal-title" id="modal-item-title">Referencia: XXX</div>
+                <div class="modal-subtitle" id="modal-item-desc">Descripción del artículo</div>
+            </div>
+            <div class="chart-box" style="margin-bottom: 0;">
+                <canvas id="itemEvolutionChart" height="150"></canvas>
+            </div>
+            <div style="margin-top: 1.5rem; display: flex; gap: 2rem; justify-content: center;">
+                <div style="text-align: center;">
+                    <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Promedio Valor
+                    </div>
+                    <div id="modal-avg-value" style="font-size: 1.2rem; font-weight: 700;">€0</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Stock Objetivo
+                    </div>
+                    <div id="modal-target-qty" style="font-size: 1.2rem; font-weight: 700; color: #3B5924;">0 uds</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let charts = {};
+        let currentData = null;
+
+        // Verificar protocolo
+        if (window.location.protocol === 'file:') {
+            document.getElementById('loader').style.display = 'none';
+            document.body.innerHTML = `
+                <div style="background:#E30613;color:white;padding:3rem;text-align:center;font-family:'Inter',sans-serif;min-height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:center;">
+                    <h1 style="font-size:2rem;margin-bottom:1rem;">⚠️ Acceso Incorrecto</h1>
+                    <p style="font-size:1rem;max-width:500px;line-height:1.5;">
+                        Has abierto el Dashboard como archivo local.<br>
+                        Para ver los datos, debes ejecutar el archivo <br>
+                        <code style="background:#000;padding:0.3rem 0.6rem;border-radius:4px;display:inline-block;margin-top:10px;">INICIAR_DASHBOARD_STOCK.bat</code>
+                    </p>
+                </div>
+            `;
+        }
+
+        async function init() {
+            try {
+                const datesRes = await fetch('/api/fechas');
+                const dates = await datesRes.json();
+                if (dates.fechas) {
+                    document.getElementById('date-start').value = dates.fecha_min;
+                    document.getElementById('date-end').value = dates.fecha_max;
+
+                    document.getElementById('date-ranking-start').value = dates.fecha_min;
+                    document.getElementById('date-ranking-end').value = dates.fecha_max;
+
+                    await loadData(dates.fecha_min, dates.fecha_max);
+                    await updateRankingSection();
+                }
+            } catch (e) { console.error(e); }
+            document.getElementById('loader').style.display = 'none';
+        }
+
+        async function loadData(start, end) {
+            const res = await fetch(`/api/summary?fecha_inicio=${start}&fecha_fin=${end}`);
+            const data = await res.json();
+            currentData = data;
+
+            updateKPIs(data.kpis, data.ultima_fecha);
+            updateTrendChart(data.evolucion_total);
+            updateCustomerChart(data.top_customers);
+            updateDistributionList(data.top_customers, data.kpis.valor_total);
+            updateTopItemsTable(data.top_items, data.kpis.valor_total);
+
+            document.getElementById('item-count-badge').innerText = data.kpis.num_items;
+        }
+
+        function updateKPIs(kpis, date) {
+            document.getElementById('kpi-total').innerText = '€' + kpis.valor_total.toLocaleString('es-ES', { minimumFractionDigits: 2 });
+            document.getElementById('kpi-items').innerText = kpis.num_items.toLocaleString();
+            document.getElementById('kpi-customers').innerText = kpis.num_clientes;
+            document.getElementById('last-update').innerText = 'Último Dato: ' + date;
+        }
+
+        function updateTrendChart(ev) {
+            const ctx = document.getElementById('trendChart').getContext('2d');
+            if (charts.trend) charts.trend.destroy();
+
+            // Calcular la media de los valores
+            const mediaValor = ev.valores.reduce((sum, val) => sum + val, 0) / ev.valores.length;
+            // Crear array con el valor de media para cada punto
+            const lineaMedia = ev.valores.map(() => mediaValor);
+
+            charts.trend = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ev.fechas,
+                    datasets: [
+                        {
+                            label: 'Valor Stock',
+                            data: ev.valores,
+                            borderColor: '#E30613',
+                            backgroundColor: 'rgba(227,6,19,0.1)',
+                            fill: true,
+                            tension: 0.4,
+                            borderWidth: 3,
+                            pointRadius: 0,
+                            order: 2
+                        },
+                        {
+                            label: 'Media: €' + mediaValor.toLocaleString('es-ES', { minimumFractionDigits: 0, maximumFractionDigits: 0 }),
+                            data: lineaMedia,
+                            borderColor: '#3B5924',
+                            backgroundColor: 'transparent',
+                            borderWidth: 2,
+                            borderDash: [8, 4],
+                            pointRadius: 0,
+                            fill: false,
+                            order: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                color: '#B0B0B0',
+                                usePointStyle: true,
+                                padding: 15,
+                                font: {
+                                    size: 12,
+                                    weight: 'bold'
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function (context) {
+                                    let label = context.dataset.label || '';
+                                    if (context.datasetIndex === 1) {
+                                        // Para la línea de media, mostrar solo "Media"
+                                        return 'Media: €' + context.parsed.y.toLocaleString('es-ES', { minimumFractionDigits: 2 });
+                                    }
+                                    return 'Valor Stock: €' + context.parsed.y.toLocaleString('es-ES', { minimumFractionDigits: 2 });
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: {
+                                color: '#B0B0B0',
+                                callback: function (value) {
+                                    return '€' + value.toLocaleString('es-ES', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+                                }
+                            }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#B0B0B0', maxTicksLimit: 12 }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateCustomerChart(top) {
+            const ctx = document.getElementById('customerChart').getContext('2d');
+            if (charts.cust) charts.cust.destroy();
+
+            charts.cust = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: top.map(c => c.Cliente),
+                    datasets: [{
+                        data: top.map(c => c.Valor_Total),
+                        backgroundColor: ['#E30613', '#FF4D4D', '#A1050D', '#808080', '#505050'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    cutout: '75%',
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        function updateDistributionList(top, total) {
+            const list = document.getElementById('customer-distribution-list');
+            list.innerHTML = '';
+            const colors = ['#E30613', '#FF4D4D', '#A1050D', '#808080', '#505050'];
+
+            top.forEach((c, i) => {
+                const percent = ((c.Valor_Total / total) * 100).toFixed(1);
+                const item = document.createElement('div');
+                item.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 0.85rem;">
+                        <span><span style="display:inline-block; width:10px; height:10px; background:${colors[i]}; border-radius:50%; margin-right:8px;"></span>${c.Cliente}</span>
+                        <span style="font-weight:600;">${percent}%</span>
+                    </div>
+                    <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; margin-bottom: 2px;">
+                        <div style="width: ${percent}%; height: 100%; background: ${colors[i]};"></div>
+                    </div>
+                    <div style="text-align: right; font-size: 0.75rem; color: var(--text-muted);">€${c.Valor_Total.toLocaleString('es-ES')}</div>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        function updateTopItemsTable(items, totalValue) {
+            const body = document.getElementById('top-items-body');
+            if (!body) return;
+            body.innerHTML = '';
+
+            if (!items || items.length === 0) {
+                body.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 2rem; color: var(--text-muted);">Sin datos disponibles</td></tr>';
+                return;
+            }
+
+            items.forEach((item, index) => {
+                const percent = ((item.Valor_Total / totalValue) * 100).toFixed(1);
+                const tr = document.createElement('tr');
+                tr.className = 'item-clickable' + (index >= 15 ? ' hidden-row' : '');
+                if (index >= 15) tr.style.display = 'none';
+
+                tr.dataset.article = item.Articulo.toLowerCase();
+                tr.dataset.desc = (item.Descripcion || '').toLowerCase();
+                tr.onclick = () => showItemEvolution(item.Articulo, item.Descripcion);
+                tr.innerHTML = `
+                    <td style="color: var(--rpk-red); font-weight: 600;">${item.Articulo}</td>
+                    <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.Descripcion}">${item.Descripcion}</td>
+                    <td>${item.Cantidad.toLocaleString()}</td>
+                    <td style="font-weight: 700; color: #3B5924">${item.Stock_Objetivo ? item.Stock_Objetivo.toLocaleString() : '-'}</td>
+                    <td style="font-weight: 600;">€${item.Valor_Total.toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="width: 35px; text-align: right;">${percent}%</span>
+                            <div style="flex-grow: 1; height: 4px; background: rgba(255,255,255,0.05); border-radius: 2px;">
+                                <div style="width: ${percent}%; height: 100%; background: var(--rpk-red);"></div>
+                            </div>
+                        </div>
+                    </td>
+                `;
+                body.appendChild(tr);
+            });
+        }
+
+        function filterTopItems() {
+            const query = document.getElementById('search-top-items').value.toLowerCase();
+            const rows = document.querySelectorAll('#top-items-body tr');
+
+            rows.forEach((row, index) => {
+                if (query === '') {
+                    // Si no hay búsqueda, volvemos a mostrar solo los primeros 15
+                    row.style.display = index < 15 ? '' : 'none';
+                } else {
+                    const text = row.dataset.article + ' ' + row.dataset.desc;
+                    row.style.display = text.includes(query) ? '' : 'none';
+                }
+            });
+        }
+
+        function filterRankingTable() {
+            const query = document.getElementById('search-clients').value.toLowerCase();
+            const rows = document.querySelectorAll('#ranking-body tr.row-expandable');
+            rows.forEach(row => {
+                const clientName = row.cells[1].innerText.toLowerCase();
+                if (row.style.display !== 'none' || query === '') {
+                    row.style.display = clientName.includes(query) ? '' : 'none';
+                }
+                // Si está expandido y lo ocultamos, mejor colapsarlo o borrar el siguiente row
+                if (row.style.display === 'none' && row.classList.contains('expanded')) {
+                    row.click(); // Esto podría ser un poco agresivo, mejor solo ocultar el child-row si existe
+                }
+            });
+        }
+
+        function updateRankingTable(list) {
+            const body = document.getElementById('ranking-body');
+            body.innerHTML = '';
+            list.forEach((c, i) => {
+                const tr = document.createElement('tr');
+                tr.className = 'row-expandable';
+                tr.onclick = (e) => {
+                    if (e.target.tagName !== 'BUTTON') toggleItems(c.Cliente, tr);
+                };
+                tr.innerHTML = `
+                    <td><span class="expand-icon">▶</span>#${i + 1}</td>
+                    <td style="font-weight:600">${c.Cliente}</td>
+                    <td>€${c.Valor_Total.toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+                    <td><button class="btn" style="padding:4px 10px; font-size:0.7rem;">Ver Artículos</button></td>
+                `;
+                body.appendChild(tr);
+            });
+        }
+
+        async function updateRankingSection() {
+            const start = document.getElementById('date-ranking-start').value;
+            const end = document.getElementById('date-ranking-end').value;
+            const res = await fetch(`/api/customers?fecha_inicio=${start}&fecha_fin=${end}`);
+            const data = await res.json();
+            updateRankingTable(data.customers);
+        }
+
+        async function resetRankingFilters() {
+            const datesRes = await fetch('/api/fechas');
+            const dates = await datesRes.json();
+            document.getElementById('date-ranking-start').value = dates.fecha_min;
+            document.getElementById('date-ranking-end').value = dates.fecha_max;
+            await updateRankingSection();
+        }
+
+        async function toggleItems(clienteId, row) {
+            const isExpanded = row.classList.contains('expanded');
+            if (isExpanded) {
+                row.classList.remove('expanded');
+                row.nextElementSibling.remove();
+            } else {
+                row.classList.add('expanded');
+                const loadingTr = document.createElement('tr');
+                loadingTr.className = 'child-row';
+                loadingTr.innerHTML = '<td colspan="4" style="padding:1rem; text-align:center; color:var(--text-muted)">Cargando artículos...</td>';
+                row.insertAdjacentElement('afterend', loadingTr);
+
+                // Determinar qué fechas usar según la sección activa
+                const activeSection = document.querySelector('.nav-item.active').dataset.section;
+                let start, end;
+
+                if (activeSection === 'ranking') {
+                    start = document.getElementById('date-ranking-start').value;
+                    end = document.getElementById('date-ranking-end').value;
+                } else {
+                    start = document.getElementById('date-start').value;
+                    end = document.getElementById('date-end').value;
+                }
+
+                const res = await fetch(`/api/customer/${clienteId}/items?fecha_inicio=${start}&fecha_fin=${end}`);
+                const data = await res.json();
+
+                let html = `
+                    <div style="padding: 1.5rem;">
+                        <div style="margin-bottom: 1rem; font-size: 0.8rem; color: var(--text-muted); display:flex; justify-content: space-between; align-items: center;">
+                            <div>* Medias calculadas en el rango: <strong>${data.fecha_inicio}</strong> a <strong>${data.fecha}</strong></div>
+                            <div style="background: var(--rpk-red); color:white; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem;">Análisis Detallado</div>
+                        </div>
+                        <div class="search-box">
+                            <span class="search-icon">🔍</span>
+                            <input type="text" class="search-input" placeholder="Filtrar artículos de este cliente..." onkeyup="filterDetailItems(this)">
+                        </div>
+                        <table class="article-table detail-items-table">
+                            <thead>
+                                <tr>
+                                    <th>Artículo</th>
+                                    <th>Descripción</th>
+                                    <th style="text-align:right">Cant. Actual</th>
+                                    <th style="text-align:right; color: var(--rpk-red)">Media Cant.</th>
+                                    <th style="text-align:right; color: #3B5924">Stock Obj.</th>
+                                    <th style="text-align:right">Valor Actual (€)</th>
+                                    <th style="text-align:right; color: var(--rpk-red)">Media Valor (€)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+
+                data.items.slice(0, 50).forEach(item => { // Aumentado a 50 para mejor búsqueda
+                    html += `
+                        <tr class="item-clickable" 
+                            data-article="${item.Articulo.toLowerCase()}" 
+                            data-desc="${(item.Descripcion || '').toLowerCase()}"
+                            onclick="showItemEvolution('${item.Articulo}', '${item.Descripcion.replace(/'/g, "\\'")}')">
+                            <td style="color: var(--rpk-red); font-weight: 600;">${item.Articulo}</td>
+                            <td>${item.Descripcion}</td>
+                            <td style="text-align:right">${item.Cantidad.toLocaleString()}</td>
+                            <td style="text-align:right; font-weight:600">${item.Media_Cantidad.toLocaleString(undefined, { maximumFractionDigits: 1 })}</td>
+                            <td style="text-align:right; font-weight:700; color: #3B5924">${item.Stock_Objetivo !== undefined && item.Stock_Objetivo !== null ? item.Stock_Objetivo.toLocaleString() : '-'}</td>
+                            <td style="text-align:right">€${item.Valor_Total.toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+                            <td style="text-align:right; font-weight:600">€${item.Media_Valor.toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+                        </tr>`;
+                });
+
+                if (data.items.length > 15) {
+                    html += `<tr><td colspan="7" style="text-align:center; padding: 1rem; color: var(--text-muted); border-top: 1px dashed rgba(255,255,255,0.1)">... y ${data.items.length - 15} artículos más</td></tr>`;
+                }
+
+                html += '</tbody></table></div>';
+
+                loadingTr.innerHTML = `<td colspan="4">${html}</td>`;
+            }
+        }
+
+        function filterDetailItems(input) {
+            const query = input.value.toLowerCase();
+            const table = input.parentElement.nextElementSibling;
+            const rows = table.querySelectorAll('tbody tr');
+            rows.forEach(row => {
+                const art = row.dataset.article || "";
+                const desc = row.dataset.desc || "";
+                if (art !== "") {
+                    row.style.display = (art.includes(query) || desc.includes(query)) ? '' : 'none';
+                }
+            });
+        }
+
+        async function showItemEvolution(articuloId, descripcion) {
+            const modal = document.getElementById('itemModal');
+            const activeSection = document.querySelector('.nav-item.active').dataset.section;
+            let start, end;
+
+            if (activeSection === 'ranking') {
+                start = document.getElementById('date-ranking-start').value;
+                end = document.getElementById('date-ranking-end').value;
+            } else {
+                start = document.getElementById('date-start').value;
+                end = document.getElementById('date-end').value;
+            }
+
+            document.getElementById('modal-item-title').innerText = 'Referencia: ' + articuloId;
+            document.getElementById('modal-item-desc').innerText = descripcion;
+            modal.style.display = 'flex';
+
+            const res = await fetch(`/api/item/${articuloId}/evolution?fecha_inicio=${start}&fecha_fin=${end}`);
+            const data = await res.json();
+
+            updateItemEvolutionChart(data);
+        }
+
+        function updateItemEvolutionChart(data) {
+            const ctx = document.getElementById('itemEvolutionChart').getContext('2d');
+            if (charts.itemEv) charts.itemEv.destroy();
+
+            const avgValue = data.valores.reduce((a, b) => a + b, 0) / data.valores.length;
+            const avgQty = data.cantidades.reduce((a, b) => a + b, 0) / data.cantidades.length;
+
+            document.getElementById('modal-avg-value').innerText = '€' + avgValue.toLocaleString('es-ES', { maximumFractionDigits: 0 });
+            document.getElementById('modal-target-qty').innerText = (data.stock_objetivo !== undefined && data.stock_objetivo !== null) ? data.stock_objetivo.toLocaleString() + ' uds' : '-';
+
+            // Create horizontal line for target stock
+            const targetLineData = data.fechas.map(() => data.stock_objetivo);
+
+            charts.itemEv = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.fechas,
+                    datasets: [
+                        {
+                            label: 'Valor (€)',
+                            data: data.valores,
+                            borderColor: '#E30613',
+                            backgroundColor: 'rgba(227,6,19,0.1)',
+                            fill: true,
+                            tension: 0.3,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Cantidad',
+                            data: data.cantidades,
+                            borderColor: '#B0B0B0',
+                            backgroundColor: 'transparent',
+                            fill: false,
+                            tension: 0.3,
+                            borderDash: [5, 5],
+                            yAxisID: 'y1',
+                            order: 2
+                        },
+                        {
+                            label: 'Stock Objetivo',
+                            data: targetLineData,
+                            borderColor: '#3B5924',
+                            backgroundColor: 'transparent',
+                            borderWidth: 2,
+                            borderDash: [8, 4],
+                            pointRadius: 0,
+                            fill: false,
+                            yAxisID: 'y1',
+                            order: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        legend: {
+                            labels: { color: '#B0B0B0' }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: {
+                                color: '#E30613',
+                                callback: val => '€' + val.toLocaleString()
+                            }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            grid: { drawOnChartArea: false },
+                            ticks: { color: '#B0B0B0' }
+                        },
+                        x: {
+                            ticks: { color: '#B0B0B0' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function closeModal() {
+            document.getElementById('itemModal').style.display = 'none';
+        }
+
+        // Close modal on click outside
+        window.onclick = function (event) {
+            const modal = document.getElementById('itemModal');
+            if (event.target == modal) {
+                closeModal();
+            }
+        }
+
+        function applyFilters() {
+            loadData(document.getElementById('date-start').value, document.getElementById('date-end').value);
+        }
+
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', () => {
+                document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+                item.classList.add('active');
+                document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
+                document.getElementById('section-' + item.dataset.section).style.display = 'block';
+            });
+        });
+
+        async function refreshAllData() {
+            document.getElementById('loader').style.display = 'flex';
+            // Limpiar buscadores
+            document.getElementById('search-top-items').value = '';
+            const searchClients = document.getElementById('search-clients');
+            if (searchClients) searchClients.value = '';
+
+            try {
+                // Forzar recarga en el backend
+                const datesRes = await fetch('/api/fechas?refresh=true');
+                const dates = await datesRes.json();
+                if (dates.fechas) {
+                    await loadData(document.getElementById('date-start').value, document.getElementById('date-end').value);
+                    await updateRankingSection();
+                }
+            } catch (e) { console.error(e); }
+
+            document.getElementById('loader').style.display = 'none';
+        }
+
+        init();
+    </script>
+</body>
+
+</html>

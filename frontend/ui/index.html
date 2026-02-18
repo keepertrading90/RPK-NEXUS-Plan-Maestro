@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +8,7 @@
     <link rel="stylesheet" href="/assets/style_nexus.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
 </head>
+
 <body>
     <div class="app-container">
         <header>
@@ -44,12 +46,17 @@
                 <div class="module-box">
                     <h2>📦 Dashboard de Stock</h2>
                     <p>Acceso al análisis detallado de existencias, ubicaciones y obsoletos.</p>
-                    <a href="https://example.com/stock" class="btn-launch" target="_blank">Abrir Módulo</a>
+                    <a href="/mod/stock" class="btn-launch">Abrir Módulo</a>
                 </div>
                 <div class="module-box">
                     <h2>⏳ Dashboard de Tiempos</h2>
                     <p>Visualización de cargas de trabajo, OEE y saturación por máquina.</p>
-                    <a href="https://example.com/tiempos" class="btn-launch" target="_blank">Abrir Módulo</a>
+                    <a href="/mod/tiempos" class="btn-launch">Abrir Módulo</a>
+                </div>
+                <div class="module-box">
+                    <h2>🎮 Simulador de Producción</h2>
+                    <p>Simulación de escenarios, cambios de cadencia y optimización de fleje.</p>
+                    <a href="/mod/simulador" class="btn-launch">Abrir Simulador</a>
                 </div>
             </div>
         </main>
@@ -68,7 +75,8 @@
                 <p style="color:var(--text-muted)">Hola Ismael, soy el asistente NEXUS. ¿En qué puedo ayudarte hoy?</p>
             </div>
             <div class="chat-input-area">
-                <input type="text" class="chat-input" id="chatInput" placeholder="Pregunta algo..." onkeypress="handleKey(event)">
+                <input type="text" class="chat-input" id="chatInput" placeholder="Pregunta algo..."
+                    onkeypress="handleKey(event)">
                 <button class="btn-send" onclick="sendMessage()">➤</button>
             </div>
         </div>
@@ -87,14 +95,14 @@
         }
 
         function handleKey(e) {
-            if(e.key === 'Enter') sendMessage();
+            if (e.key === 'Enter') sendMessage();
         }
 
         async function sendMessage() {
             const input = document.getElementById('chatInput');
             const body = document.getElementById('chatBody');
             const text = input.value.trim();
-            if(!text) return;
+            if (!text) return;
 
             // User msg
             body.innerHTML += `<p style="margin-top:10px"><strong>Tú:</strong> ${text}</p>`;
@@ -103,8 +111,8 @@
             // API Call
             const res = await fetch('/api/v1/chat', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({text: text})
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: text })
             });
             const data = await res.json();
 
@@ -114,4 +122,5 @@
         }
     </script>
 </body>
+
 </html>
