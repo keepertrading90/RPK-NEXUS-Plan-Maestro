@@ -23,7 +23,7 @@ REMOTE_SERVER = "145.3.0.54"
 REMOTE_ROOT = r"\\" + REMOTE_SERVER + r"\ofimatica\Supply Chain\PLAN PRODUCCION"
 FOLDER_STOCK = os.path.join(REMOTE_ROOT, "Listado de existencias actuales")
 FOLDER_TIME = os.path.join(REMOTE_ROOT, "List Avance Obra-Centro y Operacion")
-REMOTE_STOCK_OBJETIVOS = os.path.join(REMOTE_ROOT, "PANEL", "DASHBOARD_STOCK", "backend", "OBJETIVOS_STOCK.xlsx")
+REMOTE_STOCK_OBJETIVOS = os.path.join(REMOTE_ROOT, "PANEL", "_PROYECTOS", "DASHBOARD_STOCK", "backend", "OBJETIVOS_STOCK.xlsx")
 
 def clean_val(v):
     if pd.isna(v): return 0.0
