@@ -483,7 +483,8 @@ async def get_centro_evolution(centros_ids: str, fecha_inicio: str = None, fecha
     
     result = {"fechas": all_dates, "centros": {}}
     for cid in ids:
-        c_df = df[df['Centro'] == int(cid) if cid.isdigit() else df['Centro'] == cid]
+        # Match as string since we normalized to string in sync
+        c_df = df[df['Centro'].astype(str) == str(cid)]
         if not c_df.empty:
             c_evol = c_df.groupby('Fecha')['Carga_Dia'].sum().reindex(all_dates, fill_value=0)
             result["centros"][cid] = {"cargas": c_evol.values.tolist()}
@@ -509,7 +510,18 @@ async def get_centro_articles(centro_id: str, mes: str):
     res['porcentaje'] = (res['Horas'] / total_horas * 100).round(1)
     res = res.sort_values('Horas', ascending=False)
     
-    return {"articulos": res.to_dict('records')}
+    # NORMALIZAR CLAVES A MINÚSCULAS PARA EL FRONTEND
+    final_data = []
+    for r in res.to_dict('records'):
+        final_data.append({
+            "articulo": str(r['Articulo']),
+            "of": str(r['OF']),
+            "horas": float(r['Horas']),
+            "dias": int(r['dias']),
+            "porcentaje": float(r['porcentaje'])
+        })
+    
+    return {"articulos": final_data}
 
 # --- ENDPOINTS DEL SIMULADOR (CLASSIC V1 INTEGRATION) ---
 
