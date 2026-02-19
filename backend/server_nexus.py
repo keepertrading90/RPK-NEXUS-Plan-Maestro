@@ -494,7 +494,7 @@ async def get_centro_evolution(centros_ids: str, fecha_inicio: str = None, fecha
 @app.get("/api/centro/{centro_id}/articulos/mes/{mes}")
 async def get_centro_articles(centro_id: str, mes: str):
     # Formato mes: YYYY-MM
-    q = "SELECT Articulo, OF, Horas, Fecha FROM tiempos_detalle_articulo WHERE Centro = ? AND Fecha LIKE ?"
+    q = "SELECT Articulo, OF, Horas, Horas_Pte, Fecha FROM tiempos_detalle_articulo WHERE Centro = ? AND Fecha LIKE ?"
     data = query_db(q, (centro_id, f"{mes}%"))
     
     if not data: return {"articulos": []}
@@ -503,7 +503,8 @@ async def get_centro_articles(centro_id: str, mes: str):
     total_horas = df['Horas'].sum()
     
     res = df.groupby(['Articulo', 'OF']).agg({
-        'Horas': 'sum',
+        'Horas': 'sum',      # Para cálculo de %
+        'Horas_Pte': 'max',   # Para visualización de saldo pendiente (solicitud usuario)
         'Fecha': 'nunique'
     }).reset_index().rename(columns={'Fecha': 'dias'})
     
@@ -516,7 +517,7 @@ async def get_centro_articles(centro_id: str, mes: str):
         final_data.append({
             "articulo": str(r['Articulo']),
             "of": str(r['OF']),
-            "horas": float(r['Horas']),
+            "horas": float(r['Horas_Pte']), # Usamos el saldo pendiente máximo reportado
             "dias": int(r['dias']),
             "porcentaje": float(r['porcentaje'])
         })

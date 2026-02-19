@@ -133,11 +133,15 @@ def sync_nexus():
                 c = str(col).upper()
                 if 'CENTRO' in c: mapping[col] = 'Centro'
                 if 'ART' in c: mapping[col] = 'Articulo'
-                if 'TEJEC_DISP' in c or 'TIEMPO EJECUCION DISP' in c: mapping[col] = 'Horas'
-                if 'TEJEC PTE' in c or 'TIEMPO EJECUCION PTE' in c: mapping[col] = 'Horas_Pte'
+                if 'TEJEC_DISP' in c or 'TIEMPO EJECUCION DISP' in c or 'TEJEC_D' in c: mapping[col] = 'Horas'
+                if 'TEJEC PTE' in c or 'TIEMPO EJECUCION PTE' in c or 'T.EJEC P' in c: mapping[col] = 'Horas_Pte'
                 if 'O.F' in c or 'OF' in c: mapping[col] = 'OF'
             
             df_t = df_t_raw.rename(columns=mapping)
+            # Asegurar que existan ambas columnas aunque el Excel varíe
+            if 'Horas' not in df_t.columns: df_t['Horas'] = 0
+            if 'Horas_Pte' not in df_t.columns: df_t['Horas_Pte'] = 0
+
             df_t['Centro'] = df_t['Centro'].astype(str).str.strip()
             df_t = df_t[df_t['Centro'].str.len() <= 4]
             
@@ -148,8 +152,9 @@ def sync_nexus():
                 return clean_val(r.get('Horas_Pte'))
             
             df_t['Horas_Final'] = df_t.apply(get_final_h, axis=1)
+            df_t['Horas_Pte_Val'] = df_t['Horas_Pte'].apply(clean_val)
             df_t['Fecha'] = date_str
-            all_time_rows.append(df_t[['Fecha', 'Centro', 'Articulo', 'OF', 'Horas_Final']])
+            all_time_rows.append(df_t[['Fecha', 'Centro', 'Articulo', 'OF', 'Horas_Final', 'Horas_Pte_Val']])
         except: pass
 
     if all_time_rows:
@@ -168,15 +173,19 @@ def sync_nexus():
         df_carga_final = pd.merge(df_diario, df_mensual, on=['Mes', 'Centro'], how='left')
         df_carga_final = df_carga_final[['Fecha', 'Centro', 'Carga_Dia', 'Media_Mensual', 'Total_Mes']]
 
-        # 3. Detalle para drilldown
-        df_detalle = df_all_t.groupby(['Fecha', 'Centro', 'Articulo', 'OF'])['Horas_Final'].sum().reset_index()
-        df_detalle.columns = ['Fecha', 'Centro', 'Articulo', 'OF', 'Horas']
+        # 3. Detalle para drilldown: Sumamos 'Horas_Final' para el % de impacto, 
+        # pero tomamos el MAX de 'Horas_Pte' para reflejar el estado de la orden.
+        df_detalle = df_all_t.groupby(['Fecha', 'Centro', 'Articulo', 'OF']).agg({
+            'Horas_Final': 'sum',
+            'Horas_Pte_Val': 'max'
+        }).reset_index()
+        df_detalle.columns = ['Fecha', 'Centro', 'Articulo', 'OF', 'Horas', 'Horas_Pte']
 
         with engine.begin() as conn:
             conn.execute(text("DELETE FROM tiempos_carga"))
-            df_carga_final.to_sql("tiempos_carga", conn, if_exists="append", index=False)
+            df_carga_final.to_sql("tiempos_carga", conn, if_exists="replace", index=False)
             conn.execute(text("DELETE FROM tiempos_detalle_articulo"))
-            df_detalle.to_sql("tiempos_detalle_articulo", conn, if_exists="append", index=False)
+            df_detalle.to_sql("tiempos_detalle_articulo", conn, if_exists="replace", index=False)
         print(f"  [OK] Tiempos: {len(df_carga_final)} fotos de carga y {len(df_detalle)} detalles inyectados.")
 
     print(f"[FIN] NEXUS DB Sincronizada con éxito en {(datetime.now()-t_start).total_seconds():.1f}s.")
