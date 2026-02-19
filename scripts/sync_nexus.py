@@ -1,14 +1,11 @@
 r"""
-RPK NEXUS - Sincronizador Maestro v2.1 (Historical & Detailed)
+RPK NEXUS - Sincronizador Maestro v2.3 (Full Analytics Rebuild)
 ==============================================================
-Versión avanzada con soporte para:
-1. Evolución histórica de Stock y Tiempos.
-2. Desglose detallado por Artículo/OF para Tiempos.
-3. Normalización robusta y prevención de duplicados.
+Sigue la lógica de agregación del script original de "Tiempos" y 
+reconstruye la historia completa de Stock.
 """
 
 import os
-import sys
 import sqlite3
 import pandas as pd
 from sqlalchemy import create_engine, text
@@ -19,7 +16,7 @@ import re
 import glob
 
 # --- CONFIGURACIÓN DE RUTAS ---
-LOCAL_BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+LOCAL_BASE = r"C:\Users\ismael.rodriguez\MIS HERRAMIENTAS\Plan Maestro RPK NEXUS"
 LOCAL_DB = os.path.join(LOCAL_BASE, "backend", "db", "rpk_industrial.db")
 
 REMOTE_SERVER = "145.3.0.54"
@@ -28,159 +25,151 @@ FOLDER_STOCK = os.path.join(REMOTE_ROOT, "Listado de existencias actuales")
 FOLDER_TIME = os.path.join(REMOTE_ROOT, "List Avance Obra-Centro y Operacion")
 REMOTE_STOCK_OBJETIVOS = os.path.join(REMOTE_ROOT, "PANEL", "DASHBOARD_STOCK", "backend", "OBJETIVOS_STOCK.xlsx")
 
-def get_latest_file(folder_path, pattern):
-    if not os.path.exists(folder_path):
-        return None
-    files = glob.glob(os.path.join(folder_path, pattern))
-    if not files: return None
-    try:
-        def extract_date(f):
-            m = re.search(r'\((\d{4}-\d{2}-\d{2})', os.path.basename(f))
-            return m.group(1) if m else "0000-00-00"
-        return max(files, key=lambda f: (extract_date(f), os.path.getmtime(f)))
-    except:
-        return max(files, key=os.path.getmtime)
-
 def clean_val(v):
     if pd.isna(v): return 0.0
     if isinstance(v, (int, float)): return float(v)
-    try: return float(str(v).replace(',', '.').replace(' ', ''))
+    s = str(v).strip().replace(' ', '')
+    if not s: return 0.0
+    # Spanish format support: 1.234,56 -> 1234.56
+    if ',' in s and '.' in s: s = s.replace('.', '').replace(',', '.')
+    elif ',' in s: s = s.replace(',', '.')
+    s = re.sub(r'[^\d.\-]', '', s)
+    try: return float(s) if s else 0.0
     except: return 0.0
 
-def sync_data():
+def sync_nexus():
     t_start = datetime.now()
-    print(f"[{t_start.strftime('%H:%M:%S')}] [INFO] Iniciando Sincronización NEXUS v2.1...")
-    
-    if not os.path.exists(LOCAL_DB):
-        print(f"[ERROR] DB no encontrada en {LOCAL_DB}")
-        return
-
+    print(f"[{t_start.strftime('%H:%M:%S')}] [INIT] NEXUS v2.3 - Reconstrucción Total...")
     engine = create_engine(f"sqlite:///{LOCAL_DB.replace(os.sep, '/')}")
     temp_dir = tempfile.gettempdir()
 
-    # --- 1. PROCESAR STOCK ---
-    try:
-        latest_stock_file = get_latest_file(FOLDER_STOCK, "Listado de existencias actuales*.xlsx")
-        if latest_stock_file:
-            print(f"[STOCK] Usando: {os.path.basename(latest_stock_file)}")
-            local_path = os.path.join(temp_dir, "latest_stock.xlsx")
-            shutil.copy2(latest_stock_file, local_path)
-            
-            # Parsing RAW Stock
-            df_raw = pd.read_excel(local_path, header=None)
-            date_match = re.search(r'\((\d{4}-\d{2}-\d{2})', os.path.basename(latest_stock_file))
-            date_str = date_match.group(1) if date_match else datetime.now().strftime('%Y-%m-%d')
-            
-            data_rows = []
-            current_customer = "DESCONOCIDO"
+    # --- 1. STOCK ---
+    print(f"[STOCK] Escaneando historia...")
+    all_stock_data = []
+    stock_files = sorted(glob.glob(os.path.join(FOLDER_STOCK, "Listado de existencias actuales*.xlsx")))
+    stock_by_date = {}
+    for f in stock_files:
+        m = re.search(r'\((\d{4}-\d{2}-\d{2})', os.path.basename(f))
+        if m: stock_by_date[m.group(1)] = f
+    
+    # Cargar objetivos
+    df_obj = None
+    if os.path.exists(REMOTE_STOCK_OBJETIVOS):
+        try:
+            shutil.copy2(REMOTE_STOCK_OBJETIVOS, os.path.join(temp_dir, "obj.xlsx"))
+            df_obj = pd.read_excel(os.path.join(temp_dir, "obj.xlsx"))
+            df_obj.columns = [c.strip().upper() for c in df_obj.columns]
+            art_col = [c for c in df_obj.columns if 'ART' in c][0]
+            obj_col = [c for c in df_obj.columns if 'OBJ' in c][0]
+            df_obj = df_obj.rename(columns={art_col: 'Articulo', obj_col: 'Stock_Objetivo'})
+            df_obj['Articulo'] = df_obj['Articulo'].astype(str).str.strip().str.upper()
+        except: pass
+
+    for date_str, path in stock_by_date.items():
+        try:
+            local_p = os.path.join(temp_dir, f"s_{date_str}.xlsx")
+            shutil.copy2(path, local_p)
+            df_raw = pd.read_excel(local_p, header=None)
+            current_cust = "DESCONOCIDO"
             for _, row in df_raw.iterrows():
-                if len(row) > 7 and str(row[7]).strip() == "Divisa:EUR":
-                    current_customer = str(row[1]).strip()
-                    continue
+                if len(row) > 7 and "Divisa:EUR" in str(row[7]):
+                    current_cust = str(row[1]).strip()
                 try:
                     if str(row[0]).strip() == '1' and not pd.isna(row[4]):
-                        val_eur = row[7] if not pd.isna(row[7]) else 0.0
-                        data_rows.append({
-                            'Fecha': date_str, 'Cliente': current_customer,
+                        val = clean_val(row[7]) if clean_val(row[7]) > 0 else clean_val(row[9])
+                        all_stock_data.append({
+                            'Fecha': date_str, 'Cliente': current_cust,
                             'Articulo': str(row[1]).strip(), 'Descripcion': str(row[2]).strip(),
-                            'Cantidad': float(row[4]), 'Valor_Total': float(val_eur)
+                            'Cantidad': clean_val(row[4]), 'Valor_Total': val
                         })
                 except: continue
-            
-            df_stock = pd.DataFrame(data_rows)
-            if not df_stock.empty:
-                # Merge con Objetivos
-                if os.path.exists(REMOTE_STOCK_OBJETIVOS):
-                    try:
-                        shutil.copy2(REMOTE_STOCK_OBJETIVOS, os.path.join(temp_dir, "obj.xlsx"))
-                        df_obj = pd.read_excel(os.path.join(temp_dir, "obj.xlsx"))
-                        df_obj.columns = [c.strip().upper() for c in df_obj.columns]
-                        art_col = [c for c in df_obj.columns if 'ART' in c][0]
-                        obj_col = [c for c in df_obj.columns if 'OBJ' in c][0]
-                        df_obj = df_obj.rename(columns={art_col: 'Articulo_M', obj_col: 'Stock_Objetivo'})
-                        df_obj['Articulo_M'] = df_obj['Articulo_M'].astype(str).str.strip().str.upper()
-                        
-                        df_stock['Articulo_M'] = df_stock['Articulo'].astype(str).str.strip().str.upper()
-                        df_stock = pd.merge(df_stock, df_obj[['Articulo_M', 'Stock_Objetivo']], on='Articulo_M', how='left')
-                        df_stock['Stock_Objetivo'] = df_stock['Stock_Objetivo'].fillna(0)
-                        df_stock = df_stock.drop(columns=['Articulo_M'])
-                    except: df_stock['Stock_Objetivo'] = 0.0
-                else: df_stock['Stock_Objetivo'] = 0.0
+        except: pass
+    
+    if all_stock_data:
+        df_stock_full = pd.DataFrame(all_stock_data)
+        if df_obj is not None:
+            df_stock_full['Articulo_M'] = df_stock_full['Articulo'].astype(str).str.strip().str.upper()
+            df_stock_full = pd.merge(df_stock_full, df_obj[['Articulo', 'Stock_Objetivo']], left_on='Articulo_M', right_on='Articulo', how='left', suffixes=('', '_obj'))
+            df_stock_full['Stock_Objetivo'] = df_stock_full['Stock_Objetivo'].fillna(0)
+            df_stock_full = df_stock_full.drop(columns=['Articulo_M', 'Articulo_obj'])
+        else: df_stock_full['Stock_Objetivo'] = 0.0
 
-                # Guardar snapshot (reemplaza hoy) y evolución (acumula)
-                with engine.connect() as conn:
-                    # Limpiar hoy para evitar duplicados en snapshot y acumulación
-                    conn.execute(text(f"DELETE FROM stock_snapshot WHERE Fecha = '{date_str}'"))
-                    df_stock.to_sql("stock_snapshot", conn, if_exists="append", index=False)
-                    
-                    # Evolución Diaria
-                    total_val = df_stock['Valor_Total'].sum()
-                    conn.execute(text(f"DELETE FROM stock_evolucion WHERE Fecha = '{date_str}'"))
-                    pd.DataFrame([{'Fecha': date_str, 'Valor_Total': total_val}]).to_sql("stock_evolucion", conn, if_exists="append", index=False)
-                    
-                    # Log
-                    pd.DataFrame([{'timestamp': datetime.now(), 'modulo': 'STOCK', 'archivo': os.path.basename(latest_stock_file), 'registros': len(df_stock), 'estado': 'OK'}]).to_sql("ingest_logs", conn, if_exists="append", index=False)
-                
-                print(f"   [OK] Stock actualizado: {len(df_stock)} registros. Valor: {total_val:,.0f}€")
+        df_evol = df_stock_full.groupby('Fecha')['Valor_Total'].sum().reset_index()
 
-    except Exception as e: print(f"   [ERROR] Stock: {e}")
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM stock_snapshot"))
+            df_stock_full.to_sql("stock_snapshot", conn, if_exists="append", index=False)
+            conn.execute(text("DELETE FROM stock_evolucion"))
+            df_evol.to_sql("stock_evolucion", conn, if_exists="append", index=False)
+        print(f"  [OK] Stock: {len(df_stock_full)} registros inyectados.")
 
-    # --- 2. PROCESAR TIEMPOS ---
-    try:
-        latest_time_file = get_latest_file(FOLDER_TIME, "Listado Avance Obra*.xlsx")
-        if latest_time_file:
-            print(f"[TIEMPOS] Usando: {os.path.basename(latest_time_file)}")
-            local_path = os.path.join(temp_dir, "latest_time.xlsx")
-            shutil.copy2(latest_time_file, local_path)
+    # --- 2. TIEMPOS (Agregación histórica según ANALISIS_MENSUAL_TIEMPOS.PY) ---
+    print(f"[TIEMPOS] Procesando historia...")
+    all_time_rows = []
+    time_files = sorted(glob.glob(os.path.join(FOLDER_TIME, "Listado Avance Obra*.xlsx")))
+    time_by_date = {}
+    for f in time_files:
+        m = re.search(r'\((\d{4}-\d{2}-\d{2})', os.path.basename(f))
+        if m: time_by_date[m.group(1)] = f
+
+    for date_str, path in time_by_date.items():
+        try:
+            local_p = os.path.join(temp_dir, f"t_{date_str}.xlsx")
+            shutil.copy2(path, local_p)
+            df_t_raw = pd.read_excel(local_p)
             
-            df_raw_t = pd.read_excel(local_path)
-            date_match = re.search(r'\((\d{4}-\d{2}-\d{2})', os.path.basename(latest_time_file))
-            date_str = date_match.group(1) if date_match else datetime.now().strftime('%Y-%m-%d')
-            
-            # Normalizar columnas (busqueda difusa)
             mapping = {}
-            for col in df_raw_t.columns:
+            for col in df_t_raw.columns:
                 c = str(col).upper()
                 if 'CENTRO' in c: mapping[col] = 'Centro'
                 if 'ART' in c: mapping[col] = 'Articulo'
                 if 'TEJEC_DISP' in c or 'TIEMPO EJECUCION DISP' in c: mapping[col] = 'Horas'
-                if 'O.F' in c or 'OF' in c or 'ORDEN FABRICACION' in c: mapping[col] = 'OF'
-
-            df_t = df_raw_t.rename(columns=mapping)
-            df_t['Centro'] = df_t['Centro'].astype(str).str.strip()
-            df_t = df_t[df_t['Centro'].str.len() <= 4] # Filtro centros reales
-            df_t['Horas'] = df_t['Horas'].apply(clean_val)
+                if 'TEJEC PTE' in c or 'TIEMPO EJECUCION PTE' in c: mapping[col] = 'Horas_Pte'
+                if 'O.F' in c or 'OF' in c: mapping[col] = 'OF'
             
-            if not df_t.empty:
-                # A) Carga por Centro (para dashboard)
-                df_centros = df_t.groupby('Centro')['Horas'].sum().reset_index()
-                df_centros.columns = ['Centro', 'Carga_Dia']
-                df_centros['Fecha'] = date_str
-                # Placeholders para compatibilidad
-                df_centros['Media_Mensual'] = df_centros['Carga_Dia']
-                df_centros['Total_Mes'] = df_centros['Carga_Dia']
+            df_t = df_t_raw.rename(columns=mapping)
+            df_t['Centro'] = df_t['Centro'].astype(str).str.strip()
+            df_t = df_t[df_t['Centro'].str.len() <= 4]
+            
+            # Lógica de fallback: si Disponible es 0, usamos Pendiente
+            def get_final_h(r):
+                h = clean_val(r.get('Horas'))
+                if h > 0: return h
+                return clean_val(r.get('Horas_Pte'))
+            
+            df_t['Horas_Final'] = df_t.apply(get_final_h, axis=1)
+            df_t['Fecha'] = date_str
+            all_time_rows.append(df_t[['Fecha', 'Centro', 'Articulo', 'OF', 'Horas_Final']])
+        except: pass
 
-                # B) Detalle Artículo (para drilldown)
-                df_detalle = df_t.groupby(['Centro', 'Articulo', 'OF'])['Horas'].sum().reset_index()
-                df_detalle['Fecha'] = date_str
+    if all_time_rows:
+        df_all_t = pd.concat(all_time_rows, ignore_index=True)
+        # 1. Carga Diaria Agregada
+        df_diario = df_all_t.groupby(['Fecha', 'Centro'])['Horas_Final'].sum().reset_index()
+        df_diario.columns = ['Fecha', 'Centro', 'Carga_Dia']
+        
+        # 2. Medias Mensuales (Aquí es donde agrupamos de verdad)
+        df_diario['Mes'] = df_diario['Fecha'].str[:7] # YYYY-MM
+        df_mensual = df_diario.groupby(['Mes', 'Centro'])['Carga_Dia'].agg(
+            Media_Mensual='mean',
+            Total_Mes='sum'
+        ).reset_index()
+        
+        df_carga_final = pd.merge(df_diario, df_mensual, on=['Mes', 'Centro'], how='left')
+        df_carga_final = df_carga_final[['Fecha', 'Centro', 'Carga_Dia', 'Media_Mensual', 'Total_Mes']]
 
-                with engine.connect() as conn:
-                    # Limpiar hoy y guardar
-                    conn.execute(text(f"DELETE FROM tiempos_carga WHERE Fecha = '{date_str}'"))
-                    df_centros.to_sql("tiempos_carga", conn, if_exists="append", index=False)
-                    
-                    conn.execute(text(f"DELETE FROM tiempos_detalle_articulo WHERE Fecha = '{date_str}'"))
-                    df_detalle.to_sql("tiempos_detalle_articulo", conn, if_exists="append", index=False)
-                    
-                    # Log
-                    pd.DataFrame([{'timestamp': datetime.now(), 'modulo': 'TIEMPOS', 'archivo': os.path.basename(latest_time_file), 'registros': len(df_centros), 'estado': 'OK'}]).to_sql("ingest_logs", conn, if_exists="append", index=False)
-                
-                print(f"   [OK] Tiempos actualizados: {len(df_centros)} centros, {len(df_detalle)} detalles.")
+        # 3. Detalle para drilldown
+        df_detalle = df_all_t.groupby(['Fecha', 'Centro', 'Articulo', 'OF'])['Horas_Final'].sum().reset_index()
+        df_detalle.columns = ['Fecha', 'Centro', 'Articulo', 'OF', 'Horas']
 
-    except Exception as e: print(f"   [ERROR] Tiempos: {e}")
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM tiempos_carga"))
+            df_carga_final.to_sql("tiempos_carga", conn, if_exists="append", index=False)
+            conn.execute(text("DELETE FROM tiempos_detalle_articulo"))
+            df_detalle.to_sql("tiempos_detalle_articulo", conn, if_exists="append", index=False)
+        print(f"  [OK] Tiempos: {len(df_carga_final)} fotos de carga y {len(df_detalle)} detalles inyectados.")
 
-    t_end = datetime.now()
-    print(f"[{t_end.strftime('%H:%M:%S')}] [FIN] Sincronización exitosa ({ (t_end-t_start).total_seconds():.1f}s).")
+    print(f"[FIN] NEXUS DB Sincronizada con éxito en {(datetime.now()-t_start).total_seconds():.1f}s.")
 
 if __name__ == "__main__":
-    sync_data()
+    sync_nexus()
