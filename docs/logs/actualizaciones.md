@@ -1,5 +1,12 @@
 # Historial de Actualizaciones - RPK NEXUS
 
+## [2026-02-19] Auditoría de Datos: Precisión en Carga Diaria (Snapshot Matutino)
+- **Corrección de Carga (Tiempos)**: Se ha identificado y resuelto una discrepancia en la suma de horas diarias. El sistema ahora utiliza la **primera captura del día (aprox. 06:00/08:00 AM)** para el módulo de Tiempos, asegurando que se capture el 100% de la carga planificada antes de que las órdenes finalizadas desaparezcan del listado de "Avance Obra".
+- **Casuística Centro 782**: Resolución del caso reportado para el 2026-02-19, donde el sistema capturaba 258.14h (tarde) en lugar de los **291.26h** (mañana) correctos que reflejaban la O.F. 150987.
+- **Normalización de Formatos de API**: Estandarización de claves JSON (`articulo`, `of`, `horas`) para eliminar errores de renderizado en los desgloses (drilldown) del Dashboard.
+- **Optimización de Gráficos Evolutivos**: Ajuste en el servidor para forzar el tratamiento de IDs de centro como texto, evitando fallos de comparación en las series temporales de Chart.js.
+- **Debug & Traceability**: Creación de scripts de auditoría interna (`check_day_carga.py`, `debug_erp_file.py`) para validar futuras discrepancias contra archivos brutos del ERP.
+
 ## [2026-02-18] Certificación de Calidad: Tiempos V2 Refactor (Intacto)
 - **Fidelidad Visual Total**: Restauración completa del Dashboard de Tiempos V2 Refactor, recuperando el tema oscuro, tarjetas Bento y branding RPK original.
 - **Rutas de Alta Disponibilidad**: Ajuste de `server_nexus.py` para manejar automáticamente las rutas relativas de activos (CSS/JS) sin necesidad de prefijos, asegurando la carga inmediata del diseño.

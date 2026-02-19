@@ -106,11 +106,21 @@ def sync_nexus():
     # --- 2. TIEMPOS (Agregación histórica según ANALISIS_MENSUAL_TIEMPOS.PY) ---
     print(f"[TIEMPOS] Procesando historia...")
     all_time_rows = []
-    time_files = sorted(glob.glob(os.path.join(FOLDER_TIME, "Listado Avance Obra*.xlsx")))
+    time_files = sorted(glob.glob(os.path.join(FOLDER_TIME, "*.xlsx")))
     time_by_date = {}
     for f in time_files:
         m = re.search(r'\((\d{4}-\d{2}-\d{2})', os.path.basename(f))
-        if m: time_by_date[m.group(1)] = f
+        if m:
+            date_str = m.group(1)
+            # LOGICA DE CAPTURA DIARIA:
+            # Se utiliza la PRIMERA captura del día (usualmente entre 06:00 y 08:00 AM)
+            # Esto captura la carga planificada completa antes de que las OFs cerradas
+            # desaparezcan del listado de Avance de Obra en capturas posteriores (ej: tarde).
+            # Ejemplo: Día 2026-02-19 Centro 782 -> Mañana (291h) vs Tarde (258h).
+            if date_str not in time_by_date:
+                time_by_date[date_str] = f
+            elif os.path.basename(f) < os.path.basename(time_by_date[date_str]):
+                time_by_date[date_str] = f
 
     for date_str, path in time_by_date.items():
         try:
