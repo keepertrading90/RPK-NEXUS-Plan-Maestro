@@ -523,6 +523,59 @@ async def get_centro_articles(centro_id: str, mes: str):
         })
     
     return {"articulos": final_data}
+    
+# --- ENDPOINTS PEDIDOS DE VENTA ---
+
+@app.get("/api/pedidos/summary")
+async def get_pedidos_summary(fecha_inicio: str = None, fecha_fin: str = None):
+    # Obtener el rango de fechas si no se proporciona
+    if not fecha_inicio or not fecha_fin:
+        dates = query_db("SELECT DISTINCT Fecha_Snapshot FROM pedidos_venta ORDER BY Fecha_Snapshot DESC LIMIT 30")
+        if not dates: return {"kpis": {}, "evolucion": [], "ultima_fecha": None}
+        dates_list = [r['Fecha_Snapshot'] for r in dates]
+        actual_latest = dates_list[0]
+        fecha_inicio = dates_list[-1]
+        fecha_fin = actual_latest
+    else:
+        actual_latest = query_db("SELECT MAX(Fecha_Snapshot) as f FROM pedidos_venta", one=True)['f']
+
+    # KPIs de la última fecha
+    latest_data = query_db("SELECT SUM(Cant_Pendiente) as total_qty, SUM(Importe_EUR) as total_val FROM pedidos_venta WHERE Fecha_Snapshot = ?", (actual_latest,), one=True)
+    
+    # Evolución
+    evol = query_db("SELECT Fecha_Snapshot as fecha, SUM(Cant_Pendiente) as qty, SUM(Importe_EUR) as val FROM pedidos_venta WHERE Fecha_Snapshot BETWEEN ? AND ? GROUP BY Fecha_Snapshot ORDER BY Fecha_Snapshot", (fecha_inicio, fecha_fin))
+    
+    return {
+        "kpis": {
+            "total_piezas": round(float(latest_data['total_qty'] or 0), 0),
+            "total_importe": round(float(latest_data['total_val'] or 0), 2),
+            "num_referencias": int(query_db("SELECT COUNT(DISTINCT Articulo) as c FROM pedidos_venta WHERE Fecha_Snapshot = ?", (actual_latest,), one=True)['c'])
+        },
+        "evolucion": {
+            "fechas": [r['fecha'] for r in evol],
+            "cantidades": [r['qty'] for r in evol],
+            "importes": [r['val'] for r in evol]
+        },
+        "ultima_fecha": actual_latest
+    }
+
+@app.get("/api/pedidos/articulos")
+async def get_pedidos_articulos(fecha: str = None):
+    if not fecha:
+        fecha = query_db("SELECT MAX(Fecha_Snapshot) as f FROM pedidos_venta", one=True)['f']
+    
+    data = query_db("SELECT Articulo, Referencia, SUM(Cant_Pendiente) as qty, SUM(Importe_EUR) as val FROM pedidos_venta WHERE Fecha_Snapshot = ? GROUP BY Articulo ORDER BY val DESC LIMIT 50", (fecha,))
+    
+    return {
+        "articulos": [
+            {
+                "articulo": str(r['Articulo']),
+                "referencia": str(r['Referencia']),
+                "cantidad": float(r['qty']),
+                "importe": float(r['val'])
+            } for r in data
+        ]
+    }
 
 # --- ENDPOINTS DEL SIMULADOR (CLASSIC V1 INTEGRATION) ---
 

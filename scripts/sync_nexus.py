@@ -23,6 +23,7 @@ REMOTE_SERVER = "145.3.0.54"
 REMOTE_ROOT = r"\\" + REMOTE_SERVER + r"\ofimatica\Supply Chain\PLAN PRODUCCION"
 FOLDER_STOCK = os.path.join(REMOTE_ROOT, "Listado de existencias actuales")
 FOLDER_TIME = os.path.join(REMOTE_ROOT, "List Avance Obra-Centro y Operacion")
+FOLDER_PEDIDOS = os.path.join(REMOTE_ROOT, "Listado Pedidos Ventas")
 REMOTE_STOCK_OBJETIVOS = os.path.join(REMOTE_ROOT, "PANEL", "_PROYECTOS", "DASHBOARD_STOCK", "backend", "OBJETIVOS_STOCK.xlsx")
 
 def clean_val(v):
@@ -187,6 +188,55 @@ def sync_nexus():
             conn.execute(text("DELETE FROM tiempos_detalle_articulo"))
             df_detalle.to_sql("tiempos_detalle_articulo", conn, if_exists="replace", index=False)
         print(f"  [OK] Tiempos: {len(df_carga_final)} fotos de carga y {len(df_detalle)} detalles inyectados.")
+
+    # --- 3. PEDIDOS DE VENTA ---
+    print(f"[PEDIDOS] Procesando historia...")
+    all_orders = []
+    order_files = sorted(glob.glob(os.path.join(FOLDER_PEDIDOS, "*.xlsx")))
+    orders_by_date = {}
+    for f in order_files:
+        m = re.search(r'\((\d{4}-\d{2}-\d{2})', os.path.basename(f))
+        if m:
+            date_str = m.group(1)
+            # SNAPSHOT MATUTINO: Preferimos la primera captura del día
+            if date_str not in orders_by_date:
+                orders_by_date[date_str] = f
+            elif os.path.basename(f) < os.path.basename(orders_by_date[date_str]):
+                orders_by_date[date_str] = f
+
+    for date_str, path in orders_by_date.items():
+        try:
+            local_p = os.path.join(temp_dir, f"pv_{date_str}.xlsx")
+            shutil.copy2(path, local_p)
+            df_pv = pd.read_excel(local_p)
+            
+            # Limpieza: Buscar la cabecera real (F.Pedido o F.Ent.Prev suele estar en filas bajas)
+            # Pero en este Excel parece estar en la primera fila, con ruido después.
+            # Filtrar filas que no tengan información útil (ej: separadores '----------')
+            df_pv = df_pv.dropna(subset=['Articulo', 'Pendient.'])
+            df_pv = df_pv[df_pv['Articulo'].astype(str).str.strip() != '----------']
+            # Omitir filas de cabeceras de cliente
+            df_pv = df_pv[~df_pv['Articulo'].astype(str).str.contains('Cliente:', na=False)]
+            
+            for _, row in df_pv.iterrows():
+                try:
+                    all_orders.append({
+                        'Fecha_Snapshot': date_str,
+                        'Fecha_Entrega': str(row['F.Ent.Prev'])[:10] if not pd.isna(row['F.Ent.Prev']) else None,
+                        'Fecha_Pedido': str(row['F.Pedido'])[:10] if not pd.isna(row['F.Pedido']) else None,
+                        'Articulo': str(row['Articulo']).strip(),
+                        'Referencia': str(row['Referencia']).strip() if not pd.isna(row['Referencia']) else "",
+                        'Cant_Pendiente': clean_val(row['Pendient.']),
+                        'Importe_EUR': clean_val(row['Importe'])
+                    })
+                except: continue
+        except: pass
+
+    if all_orders:
+        df_orders_final = pd.DataFrame(all_orders)
+        with engine.begin() as conn:
+            df_orders_final.to_sql("pedidos_venta", conn, if_exists="replace", index=False)
+        print(f"  [OK] Pedidos: {len(df_orders_final)} registros históricos inyectados.")
 
     print(f"[FIN] NEXUS DB Sincronizada con éxito en {(datetime.now()-t_start).total_seconds():.1f}s.")
 

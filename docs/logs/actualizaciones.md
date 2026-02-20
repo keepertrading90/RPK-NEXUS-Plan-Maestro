@@ -1,6 +1,15 @@
-# Historial de Actualizaciones - RPK NEXUS
+# Registro de Actualizaciones - RPK NEXUS
 
-## [2026-02-19] Auditoría de Datos: Precisión en Carga Diaria (Snapshot Matutino)
+## [2026-02-19] - Integración Dashboard de Pedidos de Venta
+- **Módulo nuevo**: Creación del dashboard "Pedidos de Venta" para análisis de cartera pendiente.
+- **Backend Ingesta**: Actualizado `sync_nexus.py` para procesar archivos de la ruta `Listado Pedidos Ventas`.
+- **Base de Datos**: Nueva tabla `pedidos_venta` con más de 270,000 registros históricos inyectados.
+- **API**: Implementados endpoints `/api/pedidos/summary` (KPIs y Evolución) y `/api/pedidos/articulos` (Ranking).
+- **Frontend**: Nuevo módulo Bento con gráficas de evolución de cartera y tablas de ranking de artículos por importe.
+- **Portal**: Integración del acceso directo en el Portal Central de Nexus Hub.
+
+## [2026-02-19] - Auditoría Carga Diaria y Corrección 782
+- **Snapshot Matutino**: Modificación de `sync_nexus.py` para priorizar archivos de la mañana (06:00-08:00 AM).
 - **Corrección de Carga (Tiempos)**: Se ha identificado y resuelto una discrepancia en la suma de horas diarias. El sistema ahora utiliza la **primera captura del día (aprox. 06:00/08:00 AM)** para el módulo de Tiempos, asegurando que se capture el 100% de la carga planificada antes de que las órdenes finalizadas desaparezcan del listado de "Avance Obra".
 - **Casuística Centro 782**: Resolución del caso reportado para el 2026-02-19, donde el sistema capturaba 258.14h (tarde) en lugar de los **291.26h** (mañana) correctos que reflejaban la O.F. 150987.
 - **Normalización de Formatos de API**: Estandarización de claves JSON (`articulo`, `of`, `horas`) para eliminar errores de renderizado en los desgloses (drilldown) del Dashboard.

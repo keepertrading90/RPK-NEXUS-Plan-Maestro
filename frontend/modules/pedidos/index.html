@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pedidos de Venta | RPK NEXUS</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
+    <link rel="stylesheet" href="../../css/style.css">
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="dark-mode">
+    <div class="app-container">
+        <!-- Sidebar lateral -->
+        <aside class="sidebar">
+            <div class="logo">
+                <span class="rpk-red">RPK</span> <span class="nexus-text">NEXUS</span>
+            </div>
+            <nav>
+                <ul>
+                    <li><a href="../../../index.html">🏠 Dashboard Central</a></li>
+                    <li><a href="../tiempos/index.html">⏱️ Carga y Tiempos</a></li>
+                    <li><a href="../stock/index.html">📦 Stock y Almacén</a></li>
+                    <li class="active"><a href="#">💰 Pedidos de Venta</a></li>
+                </ul>
+            </nav>
+        </aside>
+
+        <!-- Contenido principal -->
+        <main class="main-content">
+            <header>
+                <div class="header-left">
+                    <h1>Cartera de Pedidos Pendientes</h1>
+                    <p class="subtitle">Análisis económico y logístico de ventas</p>
+                </div>
+                <div class="header-right">
+                    <div class="date-display" id="currentSnapshotDate">Actualizando...</div>
+                </div>
+            </header>
+
+            <!-- Sección Bento: KPIs -->
+            <section class="kpi-grid">
+                <div class="kpi-card bento-item">
+                    <span class="kpi-label">Importe Pendiente</span>
+                    <span class="kpi-value" id="totalImporte">€0.00</span>
+                    <span class="kpi-trend up">Cartera total en EUR</span>
+                </div>
+                <div class="kpi-card bento-item">
+                    <span class="kpi-label">Piezas Pendientes</span>
+                    <span class="kpi-value" id="totalPiezas">0</span>
+                    <span class="kpi-trend">Carga logística</span>
+                </div>
+                <div class="kpi-card bento-item">
+                    <span class="kpi-label">Referencias Activas</span>
+                    <span class="kpi-value" id="totalRefs">0</span>
+                    <span class="kpi-trend">Artículos con pedido</span>
+                </div>
+            </section>
+
+            <!-- Sección Bento: Gráficos -->
+            <section class="chart-section bento-grid">
+                <div class="chart-container bento-item large">
+                    <h3>Evolución de Cartera (€)</h3>
+                    <canvas id="evolucionChart"></canvas>
+                </div>
+                <div class="ranking-container bento-item">
+                    <h3>Top Pedidos por Valor</h3>
+                    <div class="table-scroll">
+                        <table id="topPedidosTable">
+                            <thead>
+                                <tr>
+                                    <th>Artículo</th>
+                                    <th>Cantidad</th>
+                                    <th>Importe</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Carga dinámica -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="app.js"></script>
+</body>
+</html>
