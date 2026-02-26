@@ -31,6 +31,7 @@ from backend.core import simulation_core
 from backend.analytics_core import get_cobertura_global
 import json
 from sqlalchemy.orm import Session
+from backend.api import pdf_stock
 
 # Inicializar tablas del simulador
 models_sim.init_sim_db()
@@ -55,6 +56,8 @@ app.add_middleware(
 # Modelos
 class Message(BaseModel):
     text: str
+
+app.include_router(pdf_stock.router, prefix="/api", tags=["reports"])
 
 # Modelos para el Simulador
 class OverrideBase(BaseModel):
