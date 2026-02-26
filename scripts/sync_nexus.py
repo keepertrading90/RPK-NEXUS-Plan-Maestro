@@ -58,7 +58,7 @@ def sync_nexus():
     if os.path.exists(REMOTE_STOCK_OBJETIVOS):
         try:
             shutil.copy2(REMOTE_STOCK_OBJETIVOS, os.path.join(temp_dir, "obj.xlsx"))
-            df_obj = pd.read_excel(os.path.join(temp_dir, "obj.xlsx"))
+            df_obj = pd.read_excel(os.path.join(temp_dir, "obj.xlsx"), engine='calamine')
             df_obj.columns = [c.strip().upper() for c in df_obj.columns]
             art_col = [c for c in df_obj.columns if 'ART' in c][0]
             obj_col = [c for c in df_obj.columns if 'OBJ' in c][0]
@@ -70,7 +70,7 @@ def sync_nexus():
         try:
             local_p = os.path.join(temp_dir, f"s_{date_str}.xlsx")
             shutil.copy2(path, local_p)
-            df_raw = pd.read_excel(local_p, header=None)
+            df_raw = pd.read_excel(local_p, header=None, engine='calamine')
             current_cust = "DESCONOCIDO"
             for _, row in df_raw.iterrows():
                 if len(row) > 7 and "Divisa:EUR" in str(row[7]):
@@ -127,7 +127,7 @@ def sync_nexus():
         try:
             local_p = os.path.join(temp_dir, f"t_{date_str}.xlsx")
             shutil.copy2(path, local_p)
-            df_t_raw = pd.read_excel(local_p)
+            df_t_raw = pd.read_excel(local_p, engine='calamine')
             
             mapping = {}
             for col in df_t_raw.columns:
@@ -208,7 +208,7 @@ def sync_nexus():
         try:
             local_p = os.path.join(temp_dir, f"pv_{date_str}.xlsx")
             shutil.copy2(path, local_p)
-            df_pv = pd.read_excel(local_p)
+            df_pv = pd.read_excel(local_p, engine='calamine')
             
             # Limpieza: Buscar la cabecera real (F.Pedido o F.Ent.Prev suele estar en filas bajas)
             # Pero en este Excel parece estar en la primera fila, con ruido después.
