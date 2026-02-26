@@ -1,90 +1,182 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pedidos de Venta | RPK NEXUS</title>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
-    <link rel="stylesheet" href="../../css/style.css">
-    <link rel="stylesheet" href="styles.css">
+    <title>RPK | Pedidos de Venta</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+        rel="stylesheet">
+    <!-- Icons (Lucide) -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Charts (Chart.js) -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="styles.css">
 </head>
-<body class="dark-mode">
+
+<body>
     <div class="app-container">
-        <!-- Sidebar lateral -->
+        <!-- Sidebar Navigation -->
         <aside class="sidebar">
-            <div class="logo">
-                <span class="rpk-red">RPK</span> <span class="nexus-text">NEXUS</span>
+            <div class="sidebar-logo">
+                <img src="/mod/simulador/rpk_logo.png" alt="RPK Group Logo"
+                    onerror="this.src='../simulador/rpk_logo.png'">
             </div>
-            <nav>
-                <ul>
-                    <li><a href="../../../index.html">🏠 Dashboard Central</a></li>
-                    <li><a href="../tiempos/index.html">⏱️ Carga y Tiempos</a></li>
-                    <li><a href="../stock/index.html">📦 Stock y Almacén</a></li>
-                    <li class="active"><a href="#">💰 Pedidos de Venta</a></li>
-                </ul>
+
+            <nav class="nav-menu">
+                <span class="nav-label">Módulos</span>
+                <div class="nav-item">
+                    <a href="/portal" class="nav-link">
+                        <i data-lucide="home"></i>
+                        <span>Dashboard Central</span>
+                    </a>
+                </div>
+                <div class="nav-item">
+                    <a href="/mod/tiempos/" class="nav-link">
+                        <i data-lucide="clock"></i>
+                        <span>Carga y Tiempos</span>
+                    </a>
+                </div>
+                <div class="nav-item">
+                    <a href="/mod/stock/" class="nav-link">
+                        <i data-lucide="package"></i>
+                        <span>Stock y Almacén</span>
+                    </a>
+                </div>
+                <div class="nav-item">
+                    <a href="#" class="nav-link active">
+                        <i data-lucide="shopping-cart"></i>
+                        <span>Pedidos de Venta</span>
+                    </a>
+                </div>
+
+                <span class="nav-label" style="margin-top: 2.5rem;">Configuración</span>
+                <div class="nav-item">
+                    <a href="#" class="nav-link">
+                        <i data-lucide="settings"></i>
+                        <span>Preferencias</span>
+                    </a>
+                </div>
             </nav>
+
+            <div class="sidebar-footer">
+                <div class="status-indicator">
+                    <div class="dot" id="system-status"></div>
+                    <span id="status-text">Sistema Online</span>
+                </div>
+                <p style="margin-top: 0.5rem;" id="currentSnapshotDate">Actualizando...</p>
+            </div>
         </aside>
 
-        <!-- Contenido principal -->
+        <!-- Main Content -->
         <main class="main-content">
-            <header>
-                <div class="header-left">
-                    <h1>Cartera de Pedidos Pendientes</h1>
-                    <p class="subtitle">Análisis económico y logístico de ventas</p>
+            <!-- Header Section -->
+            <header class="page-header">
+                <div class="header-title">
+                    <h1 id="page-title">Cartera de Pedidos Pendientes</h1>
+                    <span id="page-subtitle">Análisis económico y logístico de ventas</span>
                 </div>
-                <div class="header-right">
-                    <div class="date-display" id="currentSnapshotDate">Actualizando...</div>
+                <div class="action-bar">
+                    <div class="filter-pill">
+                        <i data-lucide="calendar"></i>
+                        <input type="date" id="date-from" class="date-selector" title="Fecha Inicio">
+                        <span style="color: var(--text-muted);">→</span>
+                        <input type="date" id="date-to" class="date-selector" title="Fecha Fin">
+                    </div>
+                    <button class="btn-rpk" id="btn-refresh" onclick="initDashboard()">
+                        <i data-lucide="rotate-cw"></i>
+                        <span>Actualizar</span>
+                    </button>
                 </div>
             </header>
 
-            <!-- Sección Bento: KPIs -->
-            <section class="kpi-grid">
-                <div class="kpi-card bento-item">
-                    <span class="kpi-label">Importe Pendiente</span>
-                    <span class="kpi-value" id="totalImporte">€0.00</span>
-                    <span class="kpi-trend up">Cartera total en EUR</span>
+            <!-- Dashboard View -->
+            <section id="tab-dashboard" class="tab-content active">
+                <div class="kpi-grid">
+                    <div class="glass-card kpi-card">
+                        <span class="kpi-label">Importe Pendiente</span>
+                        <div class="kpi-value">
+                            <span id="totalImporte">€0</span>
+                        </div>
+                        <div class="kpi-trend trend-up">
+                            <i data-lucide="trending-up"></i>
+                            <span>Cartera total en EUR</span>
+                        </div>
+                    </div>
+                    <div class="glass-card kpi-card">
+                        <span class="kpi-label">Piezas Pendientes</span>
+                        <div class="kpi-value">
+                            <span id="totalPiezas">0</span>
+                        </div>
+                        <div class="kpi-trend" style="color: var(--text-muted);">
+                            <i data-lucide="package"></i>
+                            <span>Carga logística</span>
+                        </div>
+                    </div>
+                    <div class="glass-card kpi-card">
+                        <span class="kpi-label">Referencias Activas</span>
+                        <div class="kpi-value">
+                            <span id="totalRefs">0</span>
+                        </div>
+                        <div class="kpi-trend trend-down">
+                            <i data-lucide="hash"></i>
+                            <span>Artículos con pedido</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="kpi-card bento-item">
-                    <span class="kpi-label">Piezas Pendientes</span>
-                    <span class="kpi-value" id="totalPiezas">0</span>
-                    <span class="kpi-trend">Carga logística</span>
-                </div>
-                <div class="kpi-card bento-item">
-                    <span class="kpi-label">Referencias Activas</span>
-                    <span class="kpi-value" id="totalRefs">0</span>
-                    <span class="kpi-trend">Artículos con pedido</span>
-                </div>
-            </section>
 
-            <!-- Sección Bento: Gráficos -->
-            <section class="chart-section bento-grid">
-                <div class="chart-container bento-item large">
-                    <h3>Evolución de Cartera (€)</h3>
-                    <canvas id="evolucionChart"></canvas>
-                </div>
-                <div class="ranking-container bento-item">
-                    <h3>Top Pedidos por Valor</h3>
-                    <div class="table-scroll">
-                        <table id="topPedidosTable">
-                            <thead>
-                                <tr>
-                                    <th>Artículo</th>
-                                    <th>Cantidad</th>
-                                    <th>Importe</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <!-- Carga dinámica -->
-                            </tbody>
-                        </table>
+                <div class="dashboard-layout">
+                    <!-- Column 1: Charts -->
+                    <div class="glass-card chart-container">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <i data-lucide="area-chart"></i>
+                                <span>Evolución de Cartera (€)</span>
+                            </div>
+                        </div>
+                        <div style="height: 400px; position: relative;">
+                            <canvas id="evolucionChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Column 2: Quick Ranking -->
+                    <div class="glass-card">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <i data-lucide="list-ordered"></i>
+                                <span>Top Pedidos por Valor</span>
+                            </div>
+                        </div>
+                        <div class="data-table-container">
+                            <table class="modern-table">
+                                <thead>
+                                    <tr>
+                                        <th>Artículo</th>
+                                        <th>Cantidad</th>
+                                        <th class="text-right">Importe</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="topPedidosTableBody">
+                                    <!-- Dynamic content -->
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </section>
+
         </main>
     </div>
 
     <!-- Scripts -->
     <script src="app.js"></script>
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+    </script>
 </body>
+
 </html>
