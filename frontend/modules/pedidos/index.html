@@ -90,6 +90,11 @@
                         <i data-lucide="rotate-cw"></i>
                         <span>Actualizar</span>
                     </button>
+                    <button class="btn-rpk" id="btn-export" onclick="openPdfModalPedidos()"
+                        style="background: var(--surface-glass); border: 1px solid var(--border-glass);"
+                        title="Exportar Informe PDF">
+                        <i data-lucide="download"></i>
+                    </button>
                 </div>
             </header>
 
@@ -171,11 +176,106 @@
         </main>
     </div>
 
+    <!-- Modal Reporte PDF (Pedidos) -->
+    <div id="pdfModalPedidos" class="overlay" style="display: none;">
+        <div class="glass-card modal-content" style="max-width: 500px; padding: 2rem; position: relative;">
+            <button class="btn-rpk" onclick="closePdfModalPedidos()"
+                style="position: absolute; top: 1rem; right: 1rem; background:transparent; border:none; padding: 0.5rem; color: white; cursor: pointer;">
+                <i data-lucide="x"></i>
+            </button>
+            <div style="margin-bottom: 2rem;">
+                <h2 style="font-size: 1.5rem; font-weight: 700; margin-bottom: 0.5rem;">Generar Informe PDF</h2>
+                <div style="color: var(--text-muted); font-size: 0.9rem;">Sales Orders & Backlog Report</div>
+            </div>
+
+            <div style="margin-bottom: 2rem; display: flex; flex-direction: column; gap: 4px;">
+                <label style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">Fecha de Análisis
+                    (vacío para usar la más reciente de cartera)</label>
+                <input type="date" id="pdf-date-pedidos"
+                    style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-glass); color: white; padding: 10px; border-radius: 8px; width: 100%;">
+            </div>
+
+            <button class="btn-rpk" onclick="downloadPdfPedidos()"
+                style="width: 100%; display: flex; justify-content: center; align-items: center; gap: 10px; background: var(--rpk-red); padding: 12px; border-radius: 8px; border:none; cursor: pointer; color: white;">
+                <span id="pdf-btn-text">Descargar Documento</span>
+                <div id="pdf-loader"
+                    style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%; display: none; margin-left:10px;">
+                </div>
+            </button>
+        </div>
+    </div>
+
     <!-- Scripts -->
     <script src="app.js"></script>
     <script>
         // Initialize Lucide icons
         lucide.createIcons();
+
+        function openPdfModalPedidos() {
+            document.getElementById('pdfModalPedidos').style.display = 'flex';
+        }
+
+        function closePdfModalPedidos() {
+            document.getElementById('pdfModalPedidos').style.display = 'none';
+        }
+
+        async function downloadPdfPedidos() {
+            const btnText = document.getElementById('pdf-btn-text');
+            const loader = document.getElementById('pdf-loader');
+
+            btnText.innerText = "Generando PDF...";
+            loader.style.display = "block";
+            // Check if CSS class for loader is missing
+            if (!document.getElementById('spin-style')) {
+                let style = document.createElement('style');
+                style.id = 'spin-style';
+                style.innerHTML = `@keyframes spin { 100% { transform: rotate(360deg); } } #pdf-loader { animation: spin 1s linear infinite; }`;
+                document.head.appendChild(style);
+            } else {
+                loader.style.animation = "spin 1s linear infinite";
+            }
+
+            const reqBody = {
+                fecha_analisis: document.getElementById('pdf-date-pedidos').value || null,
+                incluir_graficos: true
+            };
+
+            try {
+                const response = await fetch('/api/reports/pedidos-pdf', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(reqBody)
+                });
+
+                if (!response.ok) throw new Error("Error al generar PDF de Pedidos");
+
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                let filename = `Sales_Backlog_${new Date().toISOString().slice(0, 10)}.pdf`;
+                const disposition = response.headers.get('Content-Disposition');
+                if (disposition && disposition.indexOf('attachment') !== -1) {
+                    const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition);
+                    if (matches != null && matches[1]) {
+                        filename = matches[1].replace(/['"]/g, '');
+                    }
+                }
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                closePdfModalPedidos();
+            } catch (error) {
+                console.error(error);
+                alert("Error generando el informe: " + error.message);
+            } finally {
+                btnText.innerText = "Descargar Documento";
+                loader.style.display = "none";
+                loader.style.animation = "none";
+            }
+        }
     </script>
 </body>
 
