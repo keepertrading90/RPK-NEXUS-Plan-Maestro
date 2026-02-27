@@ -221,6 +221,42 @@ def process_pedidos(file_path, date_str):
         logging.warning(f"Error procesando {file_path.name}: {e}")
         return None
 
+def process_albaranes(file_path, date_str):
+    try:
+        df_raw = pd.read_excel(file_path, engine='calamine')
+        if 'Articulo' not in df_raw.columns or 'Cantidad' not in df_raw.columns: return None
+            
+        df_raw['Cliente_Mask'] = df_raw['Articulo'].astype(str).str.contains('Cliente:', na=False)
+        df_raw['Cliente_Tmp'] = np.where(df_raw['Cliente_Mask'], df_raw['Articulo'].astype(str).str.replace('Cliente:', '').str.strip(), np.nan)
+        df_raw['Cliente'] = pd.Series(df_raw['Cliente_Tmp']).ffill().fillna("DESCONOCIDO")
+        
+        df_valid = df_raw[~df_raw['Cliente_Mask']].copy()
+        if 'Importe' in df_valid.columns:
+            df_valid = df_valid.dropna(subset=['Cantidad', 'Importe'])
+        else:
+            df_valid = df_valid.dropna(subset=['Cantidad'])
+            
+        df_valid = df_valid[df_valid['Articulo'].astype(str).str.strip() != '----------']
+        if df_valid.empty: return None
+        
+        df_res = pd.DataFrame()
+        df_res['Fecha_Snapshot'] = [date_str] * len(df_valid)
+        df_res['Fecha_Albaran'] = df_valid['Fec.Alb.'].astype(str).str[:10] if 'Fec.Alb.' in df_valid.columns else None
+        df_res['Cliente'] = df_valid['Cliente'].str.upper()
+        df_res['Articulo'] = df_valid['Articulo'].astype(str).str.strip()
+        
+        alb_col = next((c for c in df_valid.columns if 'Albar' in c), None)
+        df_res['Albaran'] = df_valid[alb_col].astype(str).str.strip() if alb_col else ''
+        
+        df_res['Pedido'] = df_valid['Pedido'].astype(str).str.strip() if 'Pedido' in df_valid.columns else ''
+        df_res['Cantidad'] = df_valid['Cantidad'].apply(clean_val)
+        df_res['Importe_EUR'] = df_valid['Importe'].apply(clean_val) if 'Importe' in df_valid.columns else 0.0
+        
+        return df_res
+    except Exception as e:
+        logging.warning(f"Error procesando {file_path.name}: {e}")
+        return None
+
 def ingest_module(mod_name, source_path, process_func, target_names, is_morning_snapshot=False):
     logging.info(f"--- Escaneando historicos para {mod_name} en {source_path} ---")
     if not source_path or not source_path.exists():
@@ -278,6 +314,9 @@ def run_historical_etl():
     
     # 3. Pedidos (Primera foto del dia)
     ingest_module("pedidos", SOURCES["pedidos"], process_pedidos, ["pedidos"], is_morning_snapshot=True)
+
+    # 4. Albaranes (Ultima foto del dia)
+    ingest_module("albaranes", SOURCES["albaranes"], process_albaranes, ["albaranes"], is_morning_snapshot=False)
 
     # Re-Sincronizar vistas
     sync_duckdb()

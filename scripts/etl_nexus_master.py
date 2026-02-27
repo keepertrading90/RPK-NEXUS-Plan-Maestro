@@ -208,6 +208,41 @@ def process_pedidos(file_path):
     
     return df_res
 
+def process_albaranes(file_path):
+    df_raw = pd.read_excel(file_path, engine='calamine')
+    date_str = extract_date_from_filename(file_path.name)
+    
+    if 'Articulo' not in df_raw.columns or 'Cantidad' not in df_raw.columns:
+        return None
+        
+    df_raw['Cliente_Mask'] = df_raw['Articulo'].astype(str).str.contains('Cliente:', na=False)
+    df_raw['Cliente_Tmp'] = np.where(df_raw['Cliente_Mask'], df_raw['Articulo'].astype(str).str.replace('Cliente:', '').str.strip(), np.nan)
+    df_raw['Cliente'] = pd.Series(df_raw['Cliente_Tmp']).ffill().fillna("DESCONOCIDO")
+    
+    df_valid = df_raw[~df_raw['Cliente_Mask']].copy()
+    if 'Importe' in df_valid.columns:
+        df_valid = df_valid.dropna(subset=['Cantidad', 'Importe'])
+    else:
+        df_valid = df_valid.dropna(subset=['Cantidad'])
+        
+    df_valid = df_valid[df_valid['Articulo'].astype(str).str.strip() != '----------']
+    if df_valid.empty: return None
+    
+    df_res = pd.DataFrame()
+    df_res['Fecha_Snapshot'] = [date_str] * len(df_valid)
+    df_res['Fecha_Albaran'] = df_valid['Fec.Alb.'].astype(str).str[:10] if 'Fec.Alb.' in df_valid.columns else None
+    df_res['Cliente'] = df_valid['Cliente'].str.upper()
+    df_res['Articulo'] = df_valid['Articulo'].astype(str).str.strip()
+    
+    alb_col = next((c for c in df_valid.columns if 'Albar' in c), None)
+    df_res['Albaran'] = df_valid[alb_col].astype(str).str.strip() if alb_col else ''
+    
+    df_res['Pedido'] = df_valid['Pedido'].astype(str).str.strip() if 'Pedido' in df_valid.columns else ''
+    df_res['Cantidad'] = df_valid['Cantidad'].apply(clean_val)
+    df_res['Importe_EUR'] = df_valid['Importe'].apply(clean_val) if 'Importe' in df_valid.columns else 0.0
+    
+    return df_res
+
 def run_etl():
     start = time.time()
     logging.info(">>> INICIANDO CORAZON ETL VECTORIZADO (LAKEHOUSE) v5.5 <<<")
@@ -253,6 +288,19 @@ def run_etl():
             logging.info(f"Pedidos guardado: {len(df)} filas.")
     except Exception as e:
         logging.warning(f"Error Pedidos: {e}")
+
+    # 4. Albaranes
+    try:
+        f = get_latest_excel(SOURCES["albaranes"])
+        if f:
+            logging.info(f"Procesando Albaranes... {f.name}")
+            df = process_albaranes(f)
+            if df is not None:
+                p = store_parquet(df, LAKE_DIR / "transaccional" / "albaranes", partition=True)
+                results["albaranes"] = {"path": p, "type": "transaccional"}
+                logging.info(f"Albaranes guardado: {len(df)} filas.")
+    except Exception as e:
+        logging.warning(f"Error Albaranes: {e}")
 
     # Sincronizar DuckDB View mappings
     sync_duckdb(results)

@@ -276,9 +276,11 @@ async def get_dates(request: Request):
     table = "carga_centros"
     if "mod/stock" in referer:
         table = "existencias"
+    elif "mod/albaranes" in referer:
+        table = "albaranes"
         
-    res = query_duckdb(f"SELECT MIN(Fecha) as min, MAX(Fecha) as max FROM {table}", one=True)
-    dates = query_duckdb(f"SELECT DISTINCT Fecha FROM {table} ORDER BY Fecha")
+    res = query_duckdb(f"SELECT MIN(Fecha_Albaran) as min, MAX(Fecha_Albaran) as max FROM {table}" if table == "albaranes" else f"SELECT MIN(Fecha) as min, MAX(Fecha) as max FROM {table}", one=True)
+    dates = query_duckdb(f"SELECT DISTINCT Fecha_Albaran as Fecha FROM {table} ORDER BY Fecha_Albaran" if table == "albaranes" else f"SELECT DISTINCT Fecha FROM {table} ORDER BY Fecha")
     
     if not res or not dates or 'warning' in res:
         return {"fechas": [], "fecha_min": None, "fecha_max": None, "warning": "Using stale data"}
@@ -789,6 +791,76 @@ async def get_ingest_status():
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+# --- ENDPOINTS ALBARANES ---
+
+@app.get("/api/albaranes/resumen")
+async def get_albaranes_resumen(fecha_inicio: str = None, fecha_fin: str = None):
+    try:
+        where_clause = ""
+        if fecha_inicio and fecha_fin:
+            where_clause = f"WHERE Fecha_Albaran >= '{fecha_inicio}' AND Fecha_Albaran <= '{fecha_fin}'"
+            
+        evo = query_duckdb(f"""
+            SELECT Fecha_Albaran as Fecha, SUM(Importe_EUR) as Valor_Total, SUM(Cantidad) as Cantidad
+            FROM albaranes
+            {where_clause}
+            GROUP BY Fecha_Albaran
+            ORDER BY Fecha_Albaran
+        """)
+        
+        total = query_duckdb(f"""
+            SELECT SUM(Importe_EUR) as valor_total, SUM(Cantidad) as num_items, COUNT(DISTINCT Cliente) as num_clientes
+            FROM albaranes
+            {where_clause}
+        """, one=True)
+        
+        if not evo or 'warning' in evo:
+            return {"kpis": {"valor_total": 0, "num_items": 0, "num_clientes": 0}, "evolucion": [], "warning": "Using stale data"}
+            
+        return {"kpis": total, "evolucion": evo}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/api/albaranes/clientes")
+async def get_albaranes_clientes(fecha_inicio: str = None, fecha_fin: str = None):
+    try:
+        where_clause = ""
+        if fecha_inicio and fecha_fin:
+            where_clause = f"WHERE Fecha_Albaran >= '{fecha_inicio}' AND Fecha_Albaran <= '{fecha_fin}'"
+            
+        clientes = query_duckdb(f"""
+            SELECT Cliente, SUM(Importe_EUR) as Valor_Total, SUM(Cantidad) as Cantidad
+            FROM albaranes
+            {where_clause}
+            GROUP BY Cliente
+            ORDER BY Valor_Total DESC
+        """)
+        return clientes or []
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/api/albaranes/articulos")
+async def get_albaranes_articulos(fecha_inicio: str = None, fecha_fin: str = None, cliente_id: str = None):
+    try:
+        where_clause = "WHERE 1=1"
+        if fecha_inicio and fecha_fin:
+            where_clause += f" AND Fecha_Albaran >= '{fecha_inicio}' AND Fecha_Albaran <= '{fecha_fin}'"
+        if cliente_id:
+            where_clause += f" AND Cliente = '{cliente_id}'"
+            
+        articulos = query_duckdb(f"""
+            SELECT Articulo, SUM(Importe_EUR) as Valor_Total, SUM(Cantidad) as Cantidad
+            FROM albaranes
+            {where_clause}
+            GROUP BY Articulo
+            ORDER BY Valor_Total DESC
+            LIMIT 100
+        """)
+        return articulos or []
+    except Exception as e:
+        return {"error": str(e)}
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
