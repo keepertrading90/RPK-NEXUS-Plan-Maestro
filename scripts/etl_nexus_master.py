@@ -92,9 +92,9 @@ def sync_duckdb(parquet_files: dict):
             if file_info["path"] and file_info["path"].exists():
                 if file_info["type"] == "transaccional":
                     glob_path = file_info["path"].parent.parent.parent / "**" / "*.parquet"
-                    conn.execute(f"CREATE OR REPLACE VIEW {table_name} AS SELECT * FROM read_parquet('{glob_path}')")
+                    conn.execute(f"CREATE OR REPLACE VIEW {table_name} AS SELECT * FROM read_parquet('{glob_path}', union_by_name=True)")
                 else:
-                    conn.execute(f"CREATE OR REPLACE VIEW {table_name} AS SELECT * FROM read_parquet('{file_info['path']}')")
+                    conn.execute(f"CREATE OR REPLACE VIEW {table_name} AS SELECT * FROM read_parquet('{file_info['path']}', union_by_name=True)")
 
 def process_existencias(file_path):
     df_raw = pd.read_excel(file_path, header=None, engine='calamine')
