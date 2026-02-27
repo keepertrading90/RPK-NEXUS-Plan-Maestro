@@ -797,9 +797,10 @@ async def get_ingest_status():
 @app.get("/api/albaranes/resumen")
 async def get_albaranes_resumen(fecha_inicio: str = None, fecha_fin: str = None):
     try:
-        where_clause = ""
-        if fecha_inicio and fecha_fin:
-            where_clause = f"WHERE Fecha_Albaran >= '{fecha_inicio}' AND Fecha_Albaran <= '{fecha_fin}'"
+        conds = ["1=1"]
+        if fecha_inicio: conds.append(f"Fecha_Albaran >= '{fecha_inicio}'")
+        if fecha_fin: conds.append(f"Fecha_Albaran <= '{fecha_fin}'")
+        where_clause = "WHERE " + " AND ".join(conds)
             
         evo = query_duckdb(f"""
             SELECT Fecha_Albaran as Fecha, SUM(Importe_EUR) as Valor_Total, SUM(Cantidad) as Cantidad
@@ -825,9 +826,10 @@ async def get_albaranes_resumen(fecha_inicio: str = None, fecha_fin: str = None)
 @app.get("/api/albaranes/clientes")
 async def get_albaranes_clientes(fecha_inicio: str = None, fecha_fin: str = None):
     try:
-        where_clause = ""
-        if fecha_inicio and fecha_fin:
-            where_clause = f"WHERE Fecha_Albaran >= '{fecha_inicio}' AND Fecha_Albaran <= '{fecha_fin}'"
+        conds = ["1=1"]
+        if fecha_inicio: conds.append(f"Fecha_Albaran >= '{fecha_inicio}'")
+        if fecha_fin: conds.append(f"Fecha_Albaran <= '{fecha_fin}'")
+        where_clause = "WHERE " + " AND ".join(conds)
             
         clientes = query_duckdb(f"""
             SELECT Cliente, SUM(Importe_EUR) as Valor_Total, SUM(Cantidad) as Cantidad
@@ -843,11 +845,11 @@ async def get_albaranes_clientes(fecha_inicio: str = None, fecha_fin: str = None
 @app.get("/api/albaranes/articulos")
 async def get_albaranes_articulos(fecha_inicio: str = None, fecha_fin: str = None, cliente_id: str = None):
     try:
-        where_clause = "WHERE 1=1"
-        if fecha_inicio and fecha_fin:
-            where_clause += f" AND Fecha_Albaran >= '{fecha_inicio}' AND Fecha_Albaran <= '{fecha_fin}'"
-        if cliente_id:
-            where_clause += f" AND Cliente = '{cliente_id}'"
+        conds = ["1=1"]
+        if fecha_inicio: conds.append(f"Fecha_Albaran >= '{fecha_inicio}'")
+        if fecha_fin: conds.append(f"Fecha_Albaran <= '{fecha_fin}'")
+        if cliente_id: conds.append(f"Cliente = '{cliente_id}'")
+        where_clause = "WHERE " + " AND ".join(conds)
             
         articulos = query_duckdb(f"""
             SELECT Articulo, SUM(Importe_EUR) as Valor_Total, SUM(Cantidad) as Cantidad

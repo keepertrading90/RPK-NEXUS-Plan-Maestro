@@ -226,9 +226,17 @@ def process_albaranes(file_path, date_str):
         df_raw = pd.read_excel(file_path, engine='calamine')
         if 'Articulo' not in df_raw.columns or 'Cantidad' not in df_raw.columns: return None
             
-        df_raw['Cliente_Mask'] = df_raw['Articulo'].astype(str).str.contains('Cliente:', na=False)
-        df_raw['Cliente_Tmp'] = np.where(df_raw['Cliente_Mask'], df_raw['Articulo'].astype(str).str.replace('Cliente:', '').str.strip(), np.nan)
-        df_raw['Cliente'] = pd.Series(df_raw['Cliente_Tmp']).ffill().fillna("DESCONOCIDO")
+        df_raw['Cliente_Mask'] = df_raw['Articulo'].astype(str).str.strip() == 'Cliente:'
+        cols = df_raw.columns.tolist()
+        idx = cols.index('Articulo')
+        cliente_cols = cols[idx+1:idx+4]
+        
+        df_raw['Cliente_Tmp'] = np.where(
+            df_raw['Cliente_Mask'],
+            df_raw[cliente_cols].fillna('').astype(str).agg(' '.join, axis=1).str.replace('nan', '', case=False).str.replace(r'\s+', ' ', regex=True).str.strip(),
+            np.nan
+        )
+        df_raw['Cliente'] = pd.Series(df_raw['Cliente_Tmp']).replace('', np.nan).ffill().fillna("DESCONOCIDO")
         
         df_valid = df_raw[~df_raw['Cliente_Mask']].copy()
         if 'Importe' in df_valid.columns:

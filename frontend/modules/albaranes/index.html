@@ -238,6 +238,14 @@
                 <input type="date" id="date-start" class="rpk-input border-none bg-transparent">
                 <span class="text-gray-500">hasta</span>
                 <input type="date" id="date-end" class="rpk-input border-none bg-transparent">
+                <button onclick="clearFilter()" title="Limpiar filtro"
+                    class="text-gray-500 hover:text-white transition-colors p-1"
+                    style="background:none; border:none; cursor:pointer;">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                        </path>
+                    </svg>
+                </button>
             </div>
         </div>
     </nav>
@@ -336,6 +344,12 @@
             loadAll();
         }
 
+        function clearFilter() {
+            document.getElementById('date-start').value = '';
+            document.getElementById('date-end').value = '';
+            loadAll();
+        }
+
         function showWarning() {
             const badge = document.getElementById('status-indicator');
             const text = document.getElementById('status-text');
@@ -347,7 +361,11 @@
         async function loadAll() {
             const start = document.getElementById('date-start').value;
             const end = document.getElementById('date-end').value;
-            document.getElementById('kpi-dates').innerText = `${start} a ${end}`;
+            if (start || end) {
+                document.getElementById('kpi-dates').innerText = `${start || '...'} a ${end || '...'}`;
+            } else {
+                document.getElementById('kpi-dates').innerText = `Todo el histórico`;
+            }
 
             await Promise.all([
                 fetchSummary(start, end),
