@@ -431,13 +431,14 @@
                 <div class="page-header">
                     <div style="display: flex; align-items: center; gap: 1rem;">
                         <h1>Control de Existencias</h1>
-                            <button class="btn"
-                                style="padding: 4px 8px; background: transparent; border: 1px solid var(--glass-border); font-size: 1.2rem;"
-                                onclick="refreshAllData()" title="Refrescar datos del Excel">🔄</button>
-                            <button class="btn" onclick="openPdfModal()" style="display: flex; align-items: center; gap: 8px;">
-                                📄 Reporte PDF
-                            </button>
-                        </div>
+                        <button class="btn"
+                            style="padding: 4px 8px; background: transparent; border: 1px solid var(--glass-border); font-size: 1.2rem;"
+                            onclick="refreshAllData()" title="Refrescar datos del Excel">🔄</button>
+                        <button class="btn" onclick="openPdfModal()"
+                            style="display: flex; align-items: center; gap: 8px;">
+                            📄 Reporte PDF
+                        </button>
+                    </div>
                     <div style="display: flex; gap: 10px; align-items: center;">
                         <a href="/api/debug/objectives" target="_blank"
                             style="font-size: 0.7rem; color: var(--text-muted); text-decoration: none; border: 1px solid rgba(255,255,255,0.1); padding: 2px 5px; border-radius: 3px;">Debug
@@ -591,22 +592,25 @@
                 <div class="modal-title">Generar Informe PDF</div>
                 <div class="modal-subtitle">Inventory Health & Capital Report</div>
             </div>
-            
+
             <div class="filter-group" style="margin-bottom: 1rem;">
                 <span class="filter-label">Fecha de Análisis (vacío para usar la más reciente)</span>
                 <input type="date" id="pdf-date">
             </div>
-            
+
             <div class="filter-group" style="margin-bottom: 1.5rem;">
                 <span class="filter-label">Cliente (Opcional)</span>
-                <select id="pdf-client" style="background: var(--dark-surface-2); border: 1px solid var(--glass-border); color: white; padding: 10px; border-radius: 8px; width: 100%;">
+                <select id="pdf-client"
+                    style="background: var(--dark-surface-2); border: 1px solid var(--glass-border); color: white; padding: 10px; border-radius: 8px; width: 100%;">
                     <option value="ALL">Todos los Clientes</option>
                 </select>
             </div>
 
-            <button class="btn" onclick="downloadPdf()" style="width: 100%; display: flex; justify-content: center; gap: 10px;">
+            <button class="btn" onclick="downloadPdf()"
+                style="width: 100%; display: flex; justify-content: center; gap: 10px;">
                 <span id="pdf-btn-text">Descargar Documento</span>
-                <div id="pdf-loader" class="loader" style="width: 20px; height: 20px; border-width: 2px; display: none;"></div>
+                <div id="pdf-loader" class="loader"
+                    style="width: 20px; height: 20px; border-width: 2px; display: none;"></div>
             </button>
         </div>
     </div>
@@ -661,7 +665,7 @@
 
             // Poblar dropdown de clientes para el PDF
             const pdfClientSelect = document.getElementById('pdf-client');
-            if(pdfClientSelect.options.length <= 1) {
+            if (pdfClientSelect.options.length <= 1) {
                 data.top_customers.forEach(c => {
                     pdfClientSelect.add(new Option(c.Cliente, c.Cliente));
                 });
@@ -699,7 +703,7 @@
                             fill: true,
                             tension: 0.4,
                             borderWidth: 3,
-                            pointRadius: 0,
+                            pointRadius: 3,
                             order: 2
                         },
                         {
@@ -1169,10 +1173,10 @@
         async function downloadPdf() {
             const btnText = document.getElementById('pdf-btn-text');
             const loader = document.getElementById('pdf-loader');
-            
+
             btnText.innerText = "Generando PDF...";
             loader.style.display = "block";
-            
+
             const reqBody = {
                 fecha_analisis: document.getElementById('pdf-date').value || null,
                 cliente: document.getElementById('pdf-client').value,
@@ -1185,8 +1189,8 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(reqBody)
                 });
-                
-                if(!response.ok) throw new Error("Error al generar PDF");
+
+                if (!response.ok) throw new Error("Error al generar PDF");
 
                 const blob = await response.blob();
                 const url = window.URL.createObjectURL(blob);
@@ -1194,11 +1198,11 @@
                 a.style.display = 'none';
                 a.href = url;
                 // Intentar leer el nombre desde headers, si no usar valor por defecto
-                let filename = `Inventory_Health_${new Date().toISOString().slice(0,10)}.pdf`;
+                let filename = `Inventory_Health_${new Date().toISOString().slice(0, 10)}.pdf`;
                 const disposition = response.headers.get('Content-Disposition');
                 if (disposition && disposition.indexOf('attachment') !== -1) {
                     const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition);
-                    if (matches != null && matches[1]) { 
+                    if (matches != null && matches[1]) {
                         filename = matches[1].replace(/['"]/g, '');
                     }
                 }

@@ -23,7 +23,8 @@ SOURCES = {
     "existencias": Path(NETWORK_IP) / "Listado de Existencias Actuales",
     "carga_centros": Path(NETWORK_IP) / "List Avance Obra-Centro y Operacion",
     "maestro_local": BASE_DIR.parent / "MAESTRO FLEJE_v1.xlsx",
-    "rutas_ingenieria": None
+    "rutas_ingenieria": None,
+    "objetivos_stock": Path(NETWORK_IP) / "PANEL" / "_PROYECTOS" / "DASHBOARD_STOCK" / "backend" / "OBJETIVOS_STOCK.xlsx"
 }
 
 # Estructura de Data Lakehouse
@@ -117,7 +118,35 @@ def process_existencias(file_path):
     df_valid['Fecha'] = date_str
     
     df_stock = df_valid[['Fecha', 'Cliente', 'Articulo', 'Descripcion', 'Cantidad', 'Valor_Total']].copy()
-    df_stock['Stock_Objetivo'] = 0.0 # Will be populated if we load OBJETIVOS in Lake
+    
+    # Load objectives
+    if SOURCES["objetivos_stock"] and SOURCES["objetivos_stock"].exists():
+        try:
+            df_obj = pd.read_excel(SOURCES["objetivos_stock"], engine='calamine')
+            cols_upper = {c: str(c).upper() for c in df_obj.columns}
+            
+            art_col = next((c for c, upper in cols_upper.items() if 'ART' in upper), None)
+            obj_col = next((c for c, upper in cols_upper.items() if 'OBJ' in upper), None)
+            
+            if art_col and obj_col:
+                df_obj = df_obj[[art_col, obj_col]].copy()
+                df_obj = df_obj.rename(columns={art_col: 'ID_ARTICULO_OBJ', obj_col: 'VR_STOCK_OBJ'})
+                df_obj['ID_ARTICULO_OBJ'] = df_obj['ID_ARTICULO_OBJ'].astype(str).str.strip().str.upper()
+                df_obj['VR_STOCK_OBJ'] = df_obj['VR_STOCK_OBJ'].apply(clean_val)
+                
+                df_stock['Articulo_Merge'] = df_stock['Articulo'].str.upper()
+                df_stock = pd.merge(df_stock, df_obj, left_on='Articulo_Merge', right_on='ID_ARTICULO_OBJ', how='left')
+                df_stock['Stock_Objetivo'] = df_stock['VR_STOCK_OBJ'].fillna(0.0)
+                df_stock = df_stock.drop(columns=['Articulo_Merge', 'ID_ARTICULO_OBJ', 'VR_STOCK_OBJ'])
+            else:
+                df_stock['Stock_Objetivo'] = 0.0
+        except Exception as e:
+            logging.warning(f"Error parseando Objetivos: {e}")
+            if 'Stock_Objetivo' not in df_stock.columns:
+                df_stock['Stock_Objetivo'] = 0.0
+    else:
+        df_stock['Stock_Objetivo'] = 0.0
+            
     return df_stock
 
 def process_tiempos(file_path):
