@@ -520,7 +520,7 @@ async def get_centro_evolution(centros_ids: str, fecha_inicio: str = None, fecha
 
 @app.get("/api/centro/{centro_id}/articulos/mes/{mes}")
 async def get_centro_articles(centro_id: str, mes: str):
-    q = "SELECT Articulo, OF, Horas_Final, Horas_Pte_Val, Fecha FROM carga_centros WHERE Centro = ? AND CAST(Fecha AS VARCHAR) LIKE ?"
+    q = "SELECT Articulo, OF, Horas_Final, Horas_Pte_Val, Fecha FROM tiempos_detalle_articulo WHERE Centro = ? AND CAST(Fecha AS VARCHAR) LIKE ?"
     data = query_duckdb(q, (centro_id, f"{mes}%"))
     
     if not data or (isinstance(data, dict) and 'warning' in data): return {"articulos": []}

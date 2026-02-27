@@ -12,7 +12,7 @@ echo.
 
 :: 1. Sincronizar datos (Rápido)
 echo [1/3] Sincronizando datos de produccion (Red -> Local)...
-".\_SISTEMA\runtime_python\python.exe" scripts/sync_nexus.py
+".\_SISTEMA\runtime_python\python.exe" scripts/etl_nexus_master.py
 
 if %ERRORLEVEL% NEQ 0 (
     echo.

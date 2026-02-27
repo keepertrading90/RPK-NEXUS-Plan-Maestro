@@ -1,12 +1,17 @@
 import pandas as pd
+import numpy as np
 import duckdb
 import logging
 import time
 import os
 import unicodedata
+import re
 from datetime import datetime
 from pathlib import Path
 from python_calamine import CalamineWorkbook
+import warnings
+
+warnings.filterwarnings('ignore', category=UserWarning)
 
 # --- CONFIGURACION DE RUTAS RPK ---
 BASE_DIR = Path(__file__).resolve().parent.parent / "backend"
@@ -18,7 +23,6 @@ SOURCES = {
     "existencias": Path(NETWORK_IP) / "Listado de Existencias Actuales",
     "carga_centros": Path(NETWORK_IP) / "List Avance Obra-Centro y Operacion",
     "maestro_local": BASE_DIR.parent / "MAESTRO FLEJE_v1.xlsx",
-    # RUTAS DE INGENIERIA: se resuelve luego porque el nombre puede tener tildes
     "rutas_ingenieria": None
 }
 
@@ -26,7 +30,6 @@ SOURCES = {
 LAKE_DIR = BASE_DIR / "data_lake"
 DB_PATH = BASE_DIR / "db" / "rpk_analytical.duckdb"
 
-# Logs
 LOG_DIR = BASE_DIR.parent / "scripts" / "logs"
 LOG_DIR.mkdir(exist_ok=True, parents=True)
 logging.basicConfig(
@@ -38,41 +41,51 @@ logging.basicConfig(
     ]
 )
 
-def normalize_col(name: str) -> str:
-    """Elimina acentos y normaliza a ASCII para nombres de columnas SQL-safe."""
-    nfkd = unicodedata.normalize('NFKD', str(name).strip().upper())
-    return ''.join(c for c in nfkd if not unicodedata.combining(c))
+def clean_val(v):
+    if pd.isna(v): return 0.0
+    if isinstance(v, (int, float)): return float(v)
+    s = str(v).strip().replace(' ', '')
+    if not s: return 0.0
+    if ',' in s and '.' in s: s = s.replace('.', '').replace(',', '.')
+    elif ',' in s: s = s.replace(',', '.')
+    s = re.sub(r'[^\d.\-]', '', s)
+    try: return float(s) if s else 0.0
+    except: return 0.0
 
-def get_latest_excel(folder_path: Path) -> Path:
-    """Busca el primer archivo .xlsx disponible en la carpeta especificada."""
+def get_latest_excel(folder_path: Path):
     try:
         files = list(folder_path.glob("*.xlsx"))
-        if not files:
-            return None
+        if not files: return None
         return max(files, key=os.path.getmtime)
-    except Exception as e:
-        logging.warning(f"No se pudo acceder a la carpeta {folder_path}: {e}")
+    except:
         return None
 
+def extract_date_from_filename(filename):
+    m = re.search(r'\((\d{4}-\d{2}-\d{2})', filename)
+    if m: return m.group(1)
+    return datetime.now().strftime("%Y-%m-%d")
+
 def store_parquet(df: pd.DataFrame, target_path: Path, partition: bool = False):
-    """Guarda un DataFrame en formato Parquet (pyarrow) con soporte de particionado."""
     if partition:
         now = datetime.now()
         partition_path = target_path / f"year={now.year}" / f"month={now.month:02d}"
         partition_path.mkdir(parents=True, exist_ok=True)
-        final_file = partition_path / f"{target_path.stem}_{now.strftime('%Y%m%d')}.parquet"
+        final_file = partition_path / f"{target_path.stem}_{now.strftime('%Y%m%d%H%M')}.parquet"
     else:
         target_path.parent.mkdir(parents=True, exist_ok=True)
         final_file = target_path.with_suffix(".parquet")
 
+    # Cast object columns using PyArrow rule
+    for col in df.columns:
+        if df[col].dtype == 'object':
+            df[col] = df[col].astype(str)
+            
     df.to_parquet(final_file, engine='pyarrow', index=False)
     return final_file
 
 def sync_duckdb(parquet_files: dict):
-    """Sincroniza DuckDB creando vistas/tablas apuntando a los archivos Parquet."""
     logging.info("Sincronizando rpk_analytical.duckdb...")
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    
     with duckdb.connect(str(DB_PATH)) as conn:
         for table_name, file_info in parquet_files.items():
             if file_info["path"] and file_info["path"].exists():
@@ -81,122 +94,140 @@ def sync_duckdb(parquet_files: dict):
                     conn.execute(f"CREATE OR REPLACE VIEW {table_name} AS SELECT * FROM read_parquet('{glob_path}')")
                 else:
                     conn.execute(f"CREATE OR REPLACE VIEW {table_name} AS SELECT * FROM read_parquet('{file_info['path']}')")
-                logging.info(f"Vista synced: {table_name}")
+
+def process_existencias(file_path):
+    df_raw = pd.read_excel(file_path, header=None, engine='calamine')
+    date_str = extract_date_from_filename(file_path.name)
+    
+    # Extract Customer using localized logic vectorized
+    df_raw['Cliente_Mask'] = df_raw[7].astype(str).str.contains("Divisa:EUR", na=False)
+    df_raw['Cliente_Tmp'] = np.where(df_raw['Cliente_Mask'], df_raw[1], np.nan)
+    df_raw['Cliente'] = pd.Series(df_raw['Cliente_Tmp']).ffill().fillna("DESCONOCIDO")
+    
+    # Keep valid article rows
+    df_valid = df_raw[(df_raw[0].astype(str).str.strip() == '1') & (df_raw[4].notna())].copy()
+    
+    df_valid['Articulo'] = df_valid[1].astype(str).str.strip()
+    df_valid['Descripcion'] = df_valid[2].astype(str).str.strip()
+    df_valid['Cantidad'] = df_valid[4].apply(clean_val)
+    
+    vr7 = df_valid[7].apply(clean_val)
+    vr9 = df_valid[9].apply(clean_val)
+    df_valid['Valor_Total'] = np.where(vr7 > 0, vr7, vr9)
+    df_valid['Fecha'] = date_str
+    
+    df_stock = df_valid[['Fecha', 'Cliente', 'Articulo', 'Descripcion', 'Cantidad', 'Valor_Total']].copy()
+    df_stock['Stock_Objetivo'] = 0.0 # Will be populated if we load OBJETIVOS in Lake
+    return df_stock
+
+def process_tiempos(file_path):
+    df_t = pd.read_excel(file_path, engine='calamine')
+    date_str = extract_date_from_filename(file_path.name)
+    
+    cols_upper = {c: str(c).upper() for c in df_t.columns}
+    mapping = {}
+    for col, c in cols_upper.items():
+        if 'CENTRO' in c: mapping[col] = 'Centro'
+        elif 'ART' in c: mapping[col] = 'Articulo'
+        elif 'TEJEC_DISP' in c or 'TIEMPO EJECUCION DISP' in c or 'TEJEC_D' in c: mapping[col] = 'Horas'
+        elif 'TEJEC PTE' in c or 'TIEMPO EJECUCION PTE' in c or 'T.EJEC P' in c: mapping[col] = 'Horas_Pte'
+        elif 'O.F' in c or 'OF' in c: mapping[col] = 'OF'
+        
+    df_t = df_t.rename(columns=mapping)
+    if 'Horas' not in df_t.columns: df_t['Horas'] = 0
+    if 'Horas_Pte' not in df_t.columns: df_t['Horas_Pte'] = 0
+    
+    df_t['Centro'] = df_t['Centro'].astype(str).str.strip()
+    df_t = df_t[df_t['Centro'].str.len() <= 4].copy()
+    
+    df_t['Horas_val'] = df_t['Horas'].apply(clean_val)
+    df_t['Horas_Pte_Val'] = df_t['Horas_Pte'].apply(clean_val)
+    df_t['Horas_Final'] = np.where(df_t['Horas_val'] > 0, df_t['Horas_val'], df_t['Horas_Pte_Val'])
+    df_t['Fecha'] = date_str
+    
+    df_detalle = df_t[['Fecha', 'Centro', 'Articulo', 'OF', 'Horas_Final', 'Horas_Pte_Val']].copy()
+    
+    # Crear agregado base para carga_centros
+    df_diario = df_detalle.groupby(['Fecha', 'Centro'])['Horas_Final'].sum().reset_index()
+    df_diario = df_diario.rename(columns={'Horas_Final': 'Carga_Dia'})
+    
+    return df_detalle, df_diario
+
+def process_pedidos(file_path):
+    df_pv = pd.read_excel(file_path, engine='calamine')
+    date_str = extract_date_from_filename(file_path.name)
+    
+    df_pv = df_pv.dropna(subset=['Articulo', 'Pendient.'])
+    df_pv = df_pv[df_pv['Articulo'].astype(str).str.strip() != '----------']
+    df_pv = df_pv[~df_pv['Articulo'].astype(str).str.contains('Cliente:', na=False)].copy()
+    
+    # Mapeo rapido vectorial
+    df_res = pd.DataFrame()
+    df_res['Fecha_Snapshot'] = [date_str] * len(df_pv)
+    if 'F.Ent.Prev' in df_pv.columns:
+        df_res['Fecha_Entrega'] = df_pv['F.Ent.Prev'].astype(str).str[:10]
+    else: df_res['Fecha_Entrega'] = None
+    
+    if 'F.Pedido' in df_pv.columns:
+        df_res['Fecha_Pedido'] = df_pv['F.Pedido'].astype(str).str[:10]
+    else: df_res['Fecha_Pedido'] = None
+    
+    df_res['Articulo'] = df_pv['Articulo'].astype(str).str.strip()
+    df_res['Referencia'] = df_pv['Referencia'].astype(str).str.strip() if 'Referencia' in df_pv.columns else ""
+    df_res['Cant_Pendiente'] = df_pv['Pendient.'].apply(clean_val)
+    df_res['Importe_EUR'] = df_pv['Importe'].apply(clean_val) if 'Importe' in df_pv.columns else 0.0
+    
+    return df_res
 
 def run_etl():
-    start_total = time.time()
-    logging.info(">>> INICIANDO CORAZON ETL RPK NEXUS v5.5 (LAKEHOUSE) <<<")
+    start = time.time()
+    logging.info(">>> INICIANDO CORAZON ETL VECTORIZADO (LAKEHOUSE) v5.5 <<<")
     
     results = {}
-
-    processes = [
-        {"id": "pedidos", "type": "transaccional", "folder": SOURCES["pedidos"]},
-        {"id": "albaranes", "type": "transaccional", "folder": SOURCES["albaranes"]},
-        {"id": "existencias", "type": "maestros", "folder": SOURCES["existencias"]},
-        {"id": "carga_centros", "type": "maestros", "folder": SOURCES["carga_centros"]},
-    ]
-
-    for p in processes:
-        try:
-            excel_file = get_latest_excel(p["folder"])
-            if not excel_file:
-                logging.warning(f"No se encontro archivo para {p['id']} en {p['folder']}")
-                results[p["id"]] = {"path": None, "type": p["type"]}
-                continue
-
-            logging.info(f"Leyendo {p['id']}: {excel_file.name}")
-            df = pd.read_excel(excel_file, engine="calamine")
-            
-            df.columns = [normalize_col(c) for c in df.columns]
-            
-            for col in df.select_dtypes(include=['object']).columns:
-                df[col] = df[col].astype(str)
-            
-            target_base = LAKE_DIR / p["type"] / p["id"]
-            parquet_path = store_parquet(df, target_base, partition=(p["type"] == "transaccional"))
-            
-            results[p["id"]] = {"path": parquet_path, "type": p["type"]}
-            logging.info(f"Guardado: {p['id']} -> {len(df)} filas.")
-            
-        except Exception as e:
-            logging.warning(f"Fallo en modulo {p['id']}: {e}")
-            results[p["id"]] = {"path": None, "type": p["type"]}
-
-    # --- MAESTRO LOCAL ---
+    
+    # 1. Existencias
     try:
-        if SOURCES["maestro_local"].exists():
-            logging.info(f"Procesando Maestro Local: {SOURCES['maestro_local'].name}")
-            df_local = pd.read_excel(SOURCES["maestro_local"], engine="calamine")
-            df_local.columns = [normalize_col(c) for c in df_local.columns]
-            
-            for col in df_local.select_dtypes(include=['object']).columns:
-                df_local[col] = df_local[col].astype(str)
-                
-            path_local = store_parquet(df_local, LAKE_DIR / "maestros" / "maestro_local")
-            results["maestro_local"] = {"path": path_local, "type": "maestros"}
-        else:
-            logging.warning(f"Archivo {SOURCES['maestro_local'].name} no encontrado.")
+        f = get_latest_excel(SOURCES["existencias"])
+        if f:
+            logging.info(f"Procesando Existencias... {f.name}")
+            df = process_existencias(f)
+            p = store_parquet(df, LAKE_DIR / "transaccional" / "existencias", partition=True)
+            results["existencias"] = {"path": p, "type": "transaccional"}
+            logging.info(f"Existencias guardado: {len(df)} filas.")
     except Exception as e:
-        logging.warning(f"Error procesando maestro local: {e}")
-
-    # --- RUTAS DE INGENIERIA (ARTICULO-MAQUINA) ---
+        logging.warning(f"Error Existencias: {e}")
+        
+    # 2. Tiempos (Carga Centros -> Horas_Final + O.F)
     try:
-        def _nombre_ascii(path: Path) -> str:
-            nfkd = unicodedata.normalize('NFKD', path.name.upper())
-            return ''.join(c for c in nfkd if not unicodedata.combining(c))
-
-        ruta_ing = next(
-            (f for f in BASE_DIR.parent.iterdir()
-             if f.suffix == '.xlsx' and 'MAQUINA' in _nombre_ascii(f)),
-            None
-        )
-
-        if ruta_ing and ruta_ing.exists():
-
-            logging.info(f"Procesando Rutas Ingenieria: {ruta_ing.name}")
-            df_rutas = pd.read_excel(ruta_ing, engine="calamine")
-
-            df_rutas.columns = [normalize_col(c) for c in df_rutas.columns]
-
-            col_map = {
-                "ARTICULO-MAQUINA": "ID_RUTA",
-                "ARTICULO":  "ARTICULO",
-                "MAQUINA":   "MAQUINA",
-                "PROD_HORARIA": "PROD_HORARIA",
-                "OEE.": "OEE_REAL",
-                "FASE":   "FASE",
-                "T_PREP": "T_PREP",
-            }
-            existing = {k: v for k, v in col_map.items() if k in df_rutas.columns}
-            df_rutas = df_rutas.rename(columns=existing)
-
-            cols_utiles = [c for c in ["ARTICULO", "MAQUINA", "PROD_HORARIA", "OEE_REAL", "FASE", "T_PREP"]
-                           if c in df_rutas.columns]
-            df_rutas = df_rutas[cols_utiles].copy()
-
-            for col in ["PROD_HORARIA", "OEE_REAL", "FASE", "T_PREP"]:
-                if col in df_rutas.columns:
-                    df_rutas[col] = pd.to_numeric(df_rutas[col], errors='coerce')
-
-            df_rutas["ARTICULO"] = df_rutas["ARTICULO"].astype(str).str.strip()
-            df_rutas["MAQUINA"]  = pd.to_numeric(df_rutas["MAQUINA"], errors='coerce')
-
-            df_rutas = df_rutas.dropna(subset=["ARTICULO", "MAQUINA", "PROD_HORARIA"])
-            df_rutas = df_rutas[df_rutas["PROD_HORARIA"] > 0].reset_index(drop=True)
-
-            path_rutas = store_parquet(df_rutas, LAKE_DIR / "maestros" / "rutas_ingenieria")
-            results["rutas_ingenieria"] = {"path": path_rutas, "type": "maestros"}
-            logging.info(f"Guardado: rutas_ingenieria -> {len(df_rutas)} rutas.")
-        else:
-            logging.warning("Archivo ARTICULO-MAQUINA no encontrado. Rutas de ingenieria no actualizadas.")
+        f = get_latest_excel(SOURCES["carga_centros"])
+        if f:
+            logging.info(f"Procesando Tiempos... {f.name}")
+            df_det, df_dia = process_tiempos(f)
+            # Guardamos los "detalle_articulo" y "carga_centros_dia"
+            p1 = store_parquet(df_dia, LAKE_DIR / "transaccional" / "carga_centros", partition=True)
+            p2 = store_parquet(df_det, LAKE_DIR / "transaccional" / "carga_detalle", partition=True)
+            results["carga_centros"] = {"path": p1, "type": "transaccional"}
+            results["tiempos_detalle_articulo"] = {"path": p2, "type": "transaccional"}
+            logging.info(f"Tiempos guardado: {len(df_dia)} dias, {len(df_det)} dets.")
+            
     except Exception as e:
-        logging.warning(f"Error procesando rutas_ingenieria: {e}")
+        logging.warning(f"Error Tiempos: {e}")
+        
+    # 3. Pedidos Vendidos
+    try:
+        f = get_latest_excel(SOURCES["pedidos"])
+        if f:
+            logging.info(f"Procesando Pedidos... {f.name}")
+            df = process_pedidos(f)
+            p = store_parquet(df, LAKE_DIR / "transaccional" / "pedidos", partition=True)
+            results["pedidos"] = {"path": p, "type": "transaccional"}
+            logging.info(f"Pedidos guardado: {len(df)} filas.")
+    except Exception as e:
+        logging.warning(f"Error Pedidos: {e}")
 
-    # --- SYNC DUCKDB ---
+    # Sincronizar DuckDB View mappings
     sync_duckdb(results)
-
-    elapsed = time.time() - start_total
-    logging.info(f">>> ETL COMPLETADO EN {elapsed:.2f}s <<")
+    logging.info(f">>> ETL VECTORIZADO TERMINADO EN {time.time() - start:.2f}s <<")
 
 if __name__ == "__main__":
     run_etl()
