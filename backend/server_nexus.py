@@ -16,10 +16,12 @@ from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+import duckdb
 
 # --- CONFIGURACION DE RUTAS ---
 BASE_DIR = Path(__file__).resolve().parent.parent
 DB_PATH = BASE_DIR / "backend" / "db" / "rpk_industrial.db"
+DB_ANALYTICAL_PATH = BASE_DIR / "backend" / "db" / "rpk_analytical.duckdb"
 STATIC_DIR = BASE_DIR / "frontend"
 
 if str(BASE_DIR) not in sys.path:
@@ -119,6 +121,30 @@ def query_db(query, args=(), one=False):
         print(f"DB Error: {e}")
         return None
 
+def query_duckdb(query, args=(), one=False):
+    """
+    Carril B (Analítico): Consultas vectorizadas sobre Data Lakehouse (Parquet/DuckDB)
+    Graceful Degradation: si no hay base de datos, envía flag de error en vez de crashear.
+    """
+    try:
+        if not DB_ANALYTICAL_PATH.exists():
+            print("[WARN] Base de datos analítica no encontrada. Degradación activa.")
+            return {"warning": "Using stale data"} if one else []
+            
+        with duckdb.connect(str(DB_ANALYTICAL_PATH), read_only=True) as conn:
+            if args:
+                res = conn.execute(query, args).fetchall()
+            else:
+                res = conn.execute(query).fetchall()
+                
+            cols = [x[0] for x in conn.description]
+            rv = [dict(zip(cols, row)) for row in res]
+            
+            return (rv[0] if rv else None) if one else rv
+    except Exception as e:
+        print(f"DuckDB Error: {e}")
+        return None
+
 # --- ENDPOINTS DE INTERFAZ (UI) ---
 
 @app.get("/")
@@ -213,27 +239,27 @@ async def post_chat(req: ChatRequest):
 async def get_hub_stats():
     try:
         # 1. Stock Total
-        res_stock = query_db("SELECT SUM(Cantidad) as total, COUNT(DISTINCT Articulo) as items FROM stock_snapshot", one=True)
+        res_stock = query_duckdb("SELECT SUM(Cantidad) as total, COUNT(DISTINCT Articulo) as items FROM existencias", one=True)
         
         # 2. Saturation Media (Tiempos)
-        # Calculamos la saturacion media real de los ultimos 30 dias
-        res_sat = query_db("""
+        res_sat = query_duckdb("""
             SELECT AVG(Carga_Dia / 16.0) as sat_avg 
-            FROM tiempos_carga 
+            FROM carga_centros
             WHERE Centro NOT LIKE '9%' 
-            AND Fecha > date('now', '-30 days')
+            AND Fecha > current_date() - INTERVAL 30 DAY
         """, one=True)
         
-        # 3. Cobertura (Analítica Core)
+        # 3. Cobertura (Analítica Core) - Mantenemos como está o delegamos
         cobertura = get_cobertura_global()
         
         return {
             "stock": {
-                "total": int(res_stock['total'] or 0),
-                "items": int(res_stock['items'] or 0)
+                "total": int(res_stock['total'] or 0) if res_stock and 'total' in res_stock else 0,
+                "items": int(res_stock['items'] or 0) if res_stock and 'items' in res_stock else 0
             },
-            "saturation": round(float(res_sat['sat_avg'] or 0.74) * 100, 1),
-            "cobertura": cobertura.get("dias_cobertura_teorica", 12.4)
+            "saturation": round(float(res_sat.get('sat_avg', 0.74) if res_sat else 0.74) * 100, 1),
+            "cobertura": cobertura.get("dias_cobertura_teorica", 12.4),
+            "warning": res_stock.get('warning') if isinstance(res_stock, dict) else None
         }
     except Exception as e:
         print(f"Hub Stats Error: {e}")
@@ -247,18 +273,18 @@ async def get_hub_stats():
 @app.get("/api/fechas")
 async def get_dates(request: Request):
     referer = request.headers.get("referer", "")
-    table = "tiempos_carga"
+    table = "carga_centros"
     if "mod/stock" in referer:
-        table = "stock_snapshot"
+        table = "existencias"
         
-    res = query_db(f"SELECT MIN(Fecha) as min, MAX(Fecha) as max FROM {table}", one=True)
-    dates = query_db(f"SELECT DISTINCT Fecha FROM {table} ORDER BY Fecha")
+    res = query_duckdb(f"SELECT MIN(Fecha) as min, MAX(Fecha) as max FROM {table}", one=True)
+    dates = query_duckdb(f"SELECT DISTINCT Fecha FROM {table} ORDER BY Fecha")
     
-    if not res or not dates:
-        return {"fechas": [], "fecha_min": None, "fecha_max": None}
+    if not res or not dates or 'warning' in res:
+        return {"fechas": [], "fecha_min": None, "fecha_max": None, "warning": "Using stale data"}
         
     return {
-        "fecha_min": str(res['min']).split(' ')[0], # Limpiar si tiene hora
+        "fecha_min": str(res['min']).split(' ')[0], 
         "fecha_max": str(res['max']).split(' ')[0],
         "fechas": [str(d['Fecha']).split(' ')[0] for d in dates]
     }
@@ -269,11 +295,15 @@ async def get_summary(request: Request, fecha_inicio: str = None, fecha_fin: str
     
     # --- LOGICA DE STOCK ---
     if "mod/stock" in referer:
-        latest_available_date = query_db("SELECT MAX(Fecha) FROM stock_snapshot", one=True)[0]
+        latest = query_duckdb("SELECT MAX(Fecha) as f FROM existencias", one=True)
+        if not latest or 'warning' in latest:
+            return {"kpis": {"valor_total": 0, "num_items": 0, "num_clientes": 0}, "top_customers": [], "top_items": [], "ultima_fecha": None, "warning": "Using stale data"}
+        
+        latest_available_date = latest['f']
         actual_latest = fecha_fin if fecha_fin else latest_available_date
         
         # Filtros para evolución
-        evol_query = "SELECT Fecha, Valor_Total FROM stock_evolucion WHERE 1=1"
+        evol_query = "SELECT Fecha, SUM(Valor_Total) as Valor_Total FROM existencias WHERE 1=1"
         evol_params = []
         if fecha_inicio:
             evol_query += " AND Fecha >= ?"
@@ -281,55 +311,43 @@ async def get_summary(request: Request, fecha_inicio: str = None, fecha_fin: str
         if fecha_fin:
             evol_query += " AND Fecha <= ?"
             evol_params.append(fecha_fin)
-        evol_query += " ORDER BY Fecha"
+        evol_query += " GROUP BY Fecha ORDER BY Fecha"
         
-        evol = query_db(evol_query, tuple(evol_params))
+        evol = query_duckdb(evol_query, tuple(evol_params))
         
-        # KPIs y Datos Puntuales (usamos la fecha_fin o la última disponible)
-        kpis = query_db("""
+        kpis = query_duckdb("""
             SELECT SUM(Valor_Total) as valor_total, 
                    COUNT(DISTINCT Articulo) as num_items, 
                    COUNT(DISTINCT Cliente) as num_clientes 
-            FROM stock_snapshot WHERE Fecha = ?
+            FROM existencias WHERE Fecha = ?
         """, (actual_latest,), one=True)
-        
-        # Si no hay datos para esa fecha, intentamos la última disponible real
-        if not kpis or kpis['valor_total'] is None:
-             actual_latest = latest_available_date
-             kpis = query_db("""
-                SELECT SUM(Valor_Total) as valor_total, 
-                       COUNT(DISTINCT Articulo) as num_items, 
-                       COUNT(DISTINCT Cliente) as num_clientes 
-                FROM stock_snapshot WHERE Fecha = ?
-            """, (actual_latest,), one=True)
 
-        top_cust = query_db("""
+        top_cust = query_duckdb("""
             SELECT Cliente, SUM(Valor_Total) as Valor_Total 
-            FROM stock_snapshot WHERE Fecha = ? 
+            FROM existencias WHERE Fecha = ? 
             GROUP BY Cliente ORDER BY Valor_Total DESC LIMIT 5
         """, (actual_latest,))
         
-        top_items = query_db("""
+        top_items = query_duckdb("""
             SELECT Articulo, Descripcion, SUM(Cantidad) as Cantidad, SUM(Valor_Total) as Valor_Total, MAX(Stock_Objetivo) as Stock_Objetivo
-            FROM stock_snapshot WHERE Fecha = ? 
+            FROM existencias WHERE Fecha = ? 
             GROUP BY Articulo, Descripcion ORDER BY Valor_Total DESC LIMIT 100
         """, (actual_latest,))
         
         return {
             "kpis": dict(kpis) if kpis else {"valor_total": 0, "num_items": 0, "num_clientes": 0},
             "evolucion_total": {
-                "fechas": [r['Fecha'] for r in evol] if evol else [],
+                "fechas": [str(r['Fecha']) for r in evol] if evol else [],
                 "valores": [r['Valor_Total'] for r in evol] if evol else []
             },
             "top_customers": [dict(r) for r in top_cust] if top_cust else [],
             "top_items": [dict(r) for r in top_items] if top_items else [],
-            "ultima_fecha": actual_latest
+            "ultima_fecha": str(actual_latest)
         }
     
     # --- LOGICA DE TIEMPOS ---
     else:
-        # Regla: Excluir centros auxiliares (empiezan por 9)
-        q = "SELECT Fecha, Centro, Carga_Dia FROM tiempos_carga WHERE Centro NOT LIKE '9%'"
+        q = "SELECT Fecha, Centro, Carga_Dia FROM carga_centros WHERE Centro NOT LIKE '9%'"
         params = []
         if fecha_inicio:
             q += " AND Fecha >= ?"
@@ -338,10 +356,11 @@ async def get_summary(request: Request, fecha_inicio: str = None, fecha_fin: str
             q += " AND Fecha <= ?"
             params.append(fecha_fin)
             
-        data = query_db(q, tuple(params))
-        if not data: return {"kpis": {"total_carga": 0, "media_carga": 0, "num_centros": 0}, "rankings": [], "evolucion_total": {"fechas":[], "cargas":[]}, "evolucion_centros": {}}
+        data = query_duckdb(q, tuple(params))
+        if not data or (isinstance(data, dict) and 'warning' in data): 
+            return {"kpis": {"total_carga": 0, "media_carga": 0, "num_centros": 0}, "rankings": [], "evolucion_total": {"fechas":[], "cargas":[]}, "evolucion_centros": {}, "warning": "Using stale data"}
         
-        df = pd.DataFrame([dict(r) for r in data])
+        df = pd.DataFrame(data)
         df['Fecha'] = pd.to_datetime(df['Fecha']).dt.strftime('%Y-%m-%d')
         
         num_dias = df['Fecha'].nunique()
@@ -349,11 +368,9 @@ async def get_summary(request: Request, fecha_inicio: str = None, fecha_fin: str
         
         evol = df.groupby('Fecha')['Carga_Dia'].sum().sort_index()
         
-        # Rankings (agregados por el periodo seleccionado)
         ranking = df.groupby('Centro')['Carga_Dia'].sum().reset_index().sort_values('Carga_Dia', ascending=False)
         ranking['Media_Diaria'] = ranking['Carga_Dia'] / (num_dias if num_dias > 0 else 1)
         
-        # Evolucion de los Top 5 centros
         top_5_centros = ranking.head(5)['Centro'].tolist()
         evol_centros = {}
         for c in top_5_centros:
@@ -380,26 +397,30 @@ async def get_summary(request: Request, fecha_inicio: str = None, fecha_fin: str
 
 @app.get("/api/customers")
 async def get_stock_customers():
-    latest_date = query_db("SELECT MAX(Fecha) FROM stock_snapshot", one=True)[0]
-    custs = query_db("SELECT Cliente, SUM(Valor_Total) as Valor_Total FROM stock_snapshot WHERE Fecha = ? GROUP BY Cliente ORDER BY Valor_Total DESC", (latest_date,))
+    latest = query_duckdb("SELECT MAX(Fecha) as f FROM existencias", one=True)
+    if not latest or 'warning' in latest:
+        return {"customers": [], "warning": "Using stale data"}
+    latest_date = latest['f']
+    custs = query_duckdb("SELECT Cliente, SUM(Valor_Total) as Valor_Total FROM existencias WHERE Fecha = ? GROUP BY Cliente ORDER BY Valor_Total DESC", (latest_date,))
     return {"customers": [dict(r) for r in custs]}
 
 @app.get("/api/customer/{cliente_id}/items")
 async def get_customer_items(cliente_id: str, fecha_inicio: str = None, fecha_fin: str = None):
-    latest_date = query_db("SELECT MAX(Fecha) FROM stock_snapshot", one=True)[0]
+    latest = query_duckdb("SELECT MAX(Fecha) as f FROM existencias", one=True)
+    if not latest or 'warning' in latest:
+        return {"items": [], "cliente": cliente_id, "warning": "Using stale data"}
+    latest_date = latest['f']
     
-    # Obtener artículos actuales
-    items = query_db("""
+    items = query_duckdb("""
         SELECT Articulo, Descripcion, Cantidad, Valor_Total, Stock_Objetivo 
-        FROM stock_snapshot 
+        FROM existencias 
         WHERE Cliente = ? AND Fecha = ? 
         ORDER BY Valor_Total DESC
     """, (cliente_id, latest_date))
     
-    # Calcular medias en el rango si se proporcionan
     res_items = []
     for item in items:
-        media_q = "SELECT AVG(Cantidad) as media_q, AVG(Valor_Total) as media_v FROM stock_snapshot WHERE Cliente = ? AND Articulo = ?"
+        media_q = "SELECT AVG(Cantidad) as media_q, AVG(Valor_Total) as media_v FROM existencias WHERE Cliente = ? AND Articulo = ?"
         params = [cliente_id, item['Articulo']]
         if fecha_inicio:
             media_q += " AND Fecha >= ?"
@@ -408,7 +429,7 @@ async def get_customer_items(cliente_id: str, fecha_inicio: str = None, fecha_fi
             media_q += " AND Fecha <= ?"
             params.append(fecha_fin)
             
-        m = query_db(media_q, tuple(params), one=True)
+        m = query_duckdb(media_q, tuple(params), one=True)
         
         d = dict(item)
         d['Media_Cantidad'] = m['media_q'] if m['media_q'] else d['Cantidad']
@@ -418,15 +439,15 @@ async def get_customer_items(cliente_id: str, fecha_inicio: str = None, fecha_fi
     return {
         "items": res_items, 
         "cliente": cliente_id, 
-        "fecha": latest_date,
-        "fecha_inicio": fecha_inicio or latest_date
+        "fecha": str(latest_date),
+        "fecha_inicio": fecha_inicio or str(latest_date)
     }
 
 @app.get("/api/item/{item_id}/evolution")
 async def get_item_evolution(item_id: str, fecha_inicio: str = None, fecha_fin: str = None):
     q = """
         SELECT Fecha, Cantidad, Valor_Total, Stock_Objetivo, Descripcion 
-        FROM stock_snapshot 
+        FROM existencias 
         WHERE Articulo = ?
     """
     params = [item_id]
@@ -439,14 +460,14 @@ async def get_item_evolution(item_id: str, fecha_inicio: str = None, fecha_fin: 
         
     q += " ORDER BY Fecha"
     
-    res = query_db(q, tuple(params))
-    if not res:
+    res = query_duckdb(q, tuple(params))
+    if not res or (isinstance(res, dict) and 'warning' in res):
         return {"fechas": [], "cantidades": [], "valores": [], "stock_objetivo": 0}
     
     return {
         "articulo": item_id,
         "descripcion": res[0]['Descripcion'],
-        "fechas": [r['Fecha'] for r in res],
+        "fechas": [str(r['Fecha']) for r in res],
         "cantidades": [r['Cantidad'] for r in res],
         "valores": [r['Valor_Total'] for r in res],
         "stock_objetivo": res[-1]['Stock_Objetivo'] if res[-1]['Stock_Objetivo'] else 0
@@ -454,14 +475,16 @@ async def get_item_evolution(item_id: str, fecha_inicio: str = None, fecha_fin: 
 
 @app.get("/api/debug/objectives")
 async def debug_objectives():
-    res = query_db("SELECT Articulo, Stock_Objetivo FROM stock_snapshot WHERE Stock_Objetivo > 0 LIMIT 20")
+    res = query_duckdb("SELECT Articulo, Stock_Objetivo FROM existencias WHERE Stock_Objetivo > 0 LIMIT 20")
+    if isinstance(res, dict) and 'warning' in res: return {"objectives_sample": []}
     return {"objectives_sample": [dict(r) for r in res]}
 
 # --- ENDPOINTS ESPECIFICOS DE TIEMPOS ---
 
 @app.get("/api/centros")
 async def get_centros():
-    res = query_db("SELECT DISTINCT Centro FROM tiempos_carga ORDER BY Centro")
+    res = query_duckdb("SELECT DISTINCT Centro FROM carga_centros ORDER BY Centro")
+    if isinstance(res, dict) and 'warning' in res: return {"centros": []}
     return {"centros": [{"id": str(r['Centro'])} for r in res]}
 
 @app.get("/api/centro/{centros_ids}")
@@ -469,7 +492,7 @@ async def get_centro_evolution(centros_ids: str, fecha_inicio: str = None, fecha
     ids = [c.strip() for c in centros_ids.split(',')]
     placeholders = ','.join(['?'] * len(ids))
     
-    q = f"SELECT Fecha, Centro, Carga_Dia FROM tiempos_carga WHERE Centro IN ({placeholders})"
+    q = f"SELECT Fecha, Centro, Carga_Dia FROM carga_centros WHERE Centro IN ({placeholders})"
     params = list(ids)
     
     if fecha_inicio:
@@ -479,16 +502,15 @@ async def get_centro_evolution(centros_ids: str, fecha_inicio: str = None, fecha
         q += " AND Fecha <= ?"
         params.append(fecha_fin)
         
-    data = query_db(q, tuple(params))
-    if not data: return {"fechas": [], "centros": {}}
+    data = query_duckdb(q, tuple(params))
+    if not data or (isinstance(data, dict) and 'warning' in data): return {"fechas": [], "centros": {}}
     
-    df = pd.DataFrame([dict(r) for r in data])
+    df = pd.DataFrame(data)
     df['Fecha'] = pd.to_datetime(df['Fecha']).dt.strftime('%Y-%m-%d')
     all_dates = sorted(df['Fecha'].unique())
     
     result = {"fechas": all_dates, "centros": {}}
     for cid in ids:
-        # Match as string since we normalized to string in sync
         c_df = df[df['Centro'].astype(str) == str(cid)]
         if not c_df.empty:
             c_evol = c_df.groupby('Fecha')['Carga_Dia'].sum().reindex(all_dates, fill_value=0)
@@ -498,31 +520,29 @@ async def get_centro_evolution(centros_ids: str, fecha_inicio: str = None, fecha
 
 @app.get("/api/centro/{centro_id}/articulos/mes/{mes}")
 async def get_centro_articles(centro_id: str, mes: str):
-    # Formato mes: YYYY-MM
-    q = "SELECT Articulo, OF, Horas, Horas_Pte, Fecha FROM tiempos_detalle_articulo WHERE Centro = ? AND Fecha LIKE ?"
-    data = query_db(q, (centro_id, f"{mes}%"))
+    q = "SELECT Articulo, OF, Horas_Final, Horas_Pte_Val, Fecha FROM carga_centros WHERE Centro = ? AND CAST(Fecha AS VARCHAR) LIKE ?"
+    data = query_duckdb(q, (centro_id, f"{mes}%"))
     
-    if not data: return {"articulos": []}
+    if not data or (isinstance(data, dict) and 'warning' in data): return {"articulos": []}
     
-    df = pd.DataFrame([dict(r) for r in data])
-    total_horas = df['Horas'].sum()
+    df = pd.DataFrame(data)
+    total_horas = df['Horas_Final'].sum()
     
     res = df.groupby(['Articulo', 'OF']).agg({
-        'Horas': 'sum',      # Para cálculo de %
-        'Horas_Pte': 'max',   # Para visualización de saldo pendiente (solicitud usuario)
+        'Horas_Final': 'sum',
+        'Horas_Pte_Val': 'max',
         'Fecha': 'nunique'
     }).reset_index().rename(columns={'Fecha': 'dias'})
     
-    res['porcentaje'] = (res['Horas'] / total_horas * 100).round(1)
-    res = res.sort_values('Horas', ascending=False)
+    res['porcentaje'] = (res['Horas_Final'] / total_horas * 100).round(1)
+    res = res.sort_values('Horas_Final', ascending=False)
     
-    # NORMALIZAR CLAVES A MINÚSCULAS PARA EL FRONTEND
     final_data = []
     for r in res.to_dict('records'):
         final_data.append({
             "articulo": str(r['Articulo']),
             "of": str(r['OF']),
-            "horas": float(r['Horas_Pte']), # Usamos el saldo pendiente máximo reportado
+            "horas": float(r['Horas_Pte_Val']),
             "dias": int(r['dias']),
             "porcentaje": float(r['porcentaje'])
         })
@@ -535,41 +555,46 @@ async def get_centro_articles(centro_id: str, mes: str):
 async def get_pedidos_summary(fecha_inicio: str = None, fecha_fin: str = None):
     # Obtener el rango de fechas si no se proporciona
     if not fecha_inicio or not fecha_fin:
-        dates = query_db("SELECT DISTINCT Fecha_Snapshot FROM pedidos_venta ORDER BY Fecha_Snapshot DESC LIMIT 30")
-        if not dates: return {"kpis": {}, "evolucion": [], "ultima_fecha": None}
-        dates_list = [r['Fecha_Snapshot'] for r in dates]
+        dates = query_duckdb("SELECT DISTINCT Fecha_Snapshot FROM pedidos ORDER BY Fecha_Snapshot DESC LIMIT 30")
+        if not dates or (isinstance(dates, dict) and 'warning' in dates): return {"kpis": {}, "evolucion": [], "ultima_fecha": None, "warning": "Using stale data"}
+        dates_list = [str(r['Fecha_Snapshot']) for r in dates]
         actual_latest = dates_list[0]
         fecha_inicio = dates_list[-1]
         fecha_fin = actual_latest
     else:
-        actual_latest = query_db("SELECT MAX(Fecha_Snapshot) as f FROM pedidos_venta", one=True)['f']
+        actual_latest = query_duckdb("SELECT MAX(Fecha_Snapshot) as f FROM pedidos", one=True)['f']
 
     # KPIs de la última fecha
-    latest_data = query_db("SELECT SUM(Cant_Pendiente) as total_qty, SUM(Importe_EUR) as total_val FROM pedidos_venta WHERE Fecha_Snapshot = ?", (actual_latest,), one=True)
+    latest_data = query_duckdb("SELECT SUM(Cant_Pendiente) as total_qty, SUM(Importe_EUR) as total_val FROM pedidos WHERE Fecha_Snapshot = ?", (actual_latest,), one=True)
     
     # Evolución
-    evol = query_db("SELECT Fecha_Snapshot as fecha, SUM(Cant_Pendiente) as qty, SUM(Importe_EUR) as val FROM pedidos_venta WHERE Fecha_Snapshot BETWEEN ? AND ? GROUP BY Fecha_Snapshot ORDER BY Fecha_Snapshot", (fecha_inicio, fecha_fin))
+    evol = query_duckdb("SELECT Fecha_Snapshot as fecha, SUM(Cant_Pendiente) as qty, SUM(Importe_EUR) as val FROM pedidos WHERE Fecha_Snapshot BETWEEN ? AND ? GROUP BY Fecha_Snapshot ORDER BY Fecha_Snapshot", (fecha_inicio, fecha_fin))
+    
+    num_refs = query_duckdb("SELECT COUNT(DISTINCT Articulo) as c FROM pedidos WHERE Fecha_Snapshot = ?", (actual_latest,), one=True)
     
     return {
         "kpis": {
-            "total_piezas": round(float(latest_data['total_qty'] or 0), 0),
-            "total_importe": round(float(latest_data['total_val'] or 0), 2),
-            "num_referencias": int(query_db("SELECT COUNT(DISTINCT Articulo) as c FROM pedidos_venta WHERE Fecha_Snapshot = ?", (actual_latest,), one=True)['c'])
+            "total_piezas": round(float(latest_data['total_qty'] or 0), 0) if latest_data else 0,
+            "total_importe": round(float(latest_data['total_val'] or 0), 2) if latest_data else 0,
+            "num_referencias": int(num_refs['c'] if num_refs else 0)
         },
         "evolucion": {
-            "fechas": [r['fecha'] for r in evol],
-            "cantidades": [r['qty'] for r in evol],
-            "importes": [r['val'] for r in evol]
+            "fechas": [str(r['fecha']) for r in evol] if evol else [],
+            "cantidades": [r['qty'] for r in evol] if evol else [],
+            "importes": [r['val'] for r in evol] if evol else []
         },
-        "ultima_fecha": actual_latest
+        "ultima_fecha": str(actual_latest)
     }
 
 @app.get("/api/pedidos/articulos")
 async def get_pedidos_articulos(fecha: str = None):
     if not fecha:
-        fecha = query_db("SELECT MAX(Fecha_Snapshot) as f FROM pedidos_venta", one=True)['f']
+        latest = query_duckdb("SELECT MAX(Fecha_Snapshot) as f FROM pedidos", one=True)
+        if not latest or 'warning' in latest: return {"articulos": []}
+        fecha = latest['f']
     
-    data = query_db("SELECT Articulo, Referencia, SUM(Cant_Pendiente) as qty, SUM(Importe_EUR) as val FROM pedidos_venta WHERE Fecha_Snapshot = ? GROUP BY Articulo ORDER BY val DESC LIMIT 50", (fecha,))
+    data = query_duckdb("SELECT Articulo, Referencia, SUM(Cant_Pendiente) as qty, SUM(Importe_EUR) as val FROM pedidos WHERE Fecha_Snapshot = ? GROUP BY Articulo, Referencia ORDER BY val DESC LIMIT 50", (fecha,))
+    if isinstance(data, dict) and 'warning' in data: return {"articulos": []}
     
     return {
         "articulos": [

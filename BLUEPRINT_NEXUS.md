@@ -3,12 +3,15 @@ Este documento es la **fuente de la verdad arquitectónica** para la IA y los de
 
 ## RESTICCIONES Y CARRILES
 - **Carril A (Transaccional - SQLite)**: Para mutaciones de datos del usuario, guardar escenarios y configuraciones (server_nexus.py).
-- **Carril B (Analítico - DuckDB/Parquet)**: Para lectura masiva. WASM en frontend. Prohibido openpyxl, usar calamine / polars / pyarrow.
+- **Carril B (Analítico - DuckDB/Parquet)**: Para lectura masiva de Tiempos, Pedidos y Stock. Los endpoints `/api/summary` o `/api/fechas` tiran contra `rpk_analytical.duckdb` y los parquets generados por `etl_nexus_master.py`. Prohibido openpyxl, usar calamine / polars / pyarrow.
 - **Python Portable**: Siempre ejecutar usando `_SISTEMA\runtime_python\python.exe`.
 
 ## ESTRUCTURA DEL BACKEND (Python 3.12 / FastAPI)
 - **Framework**: FastAPI
 - **Vectorización Obligatoria**: Pandas/NumPy para cálculos. Prohibido usar bucles `for` o `.iterrows()`.
+- **Motor ETL (Lakehouse)**:
+  - Script central: `scripts/etl_nexus_master.py`. Escribe Parquets particionados en `backend/data_lake/`.
+  - Conexion Analitica: `backend/db/rpk_analytical.duckdb`. Contiene vistas mapeadas a los parquets en modo "Graceful Degradation".
 - **Nuevos Endpoints**:
   - `POST /api/reports/stock-pdf`: Generación de informes en PDF de Inventario Financiero utilizando ReportLab (`backend/api/pdf_stock.py`).
 
