@@ -189,13 +189,13 @@ def get_pedidos_actuales(dias_laborales: int = None):
 
         if dias_laborales is not None:
             horizonte = datetime.now() + timedelta(days=int(dias_laborales))
-            if 'F.ENT.PREV' in df_orders.columns:
-                df_orders['F.ENT.PREV'] = pd.to_datetime(df_orders['F.ENT.PREV'], errors='coerce')
-                df_orders = df_orders[(df_orders['F.ENT.PREV'] <= horizonte) | (df_orders['F.ENT.PREV'].isna())].copy()
+            if 'FECHA_ENTREGA' in df_orders.columns:
+                df_orders['FECHA_ENTREGA'] = pd.to_datetime(df_orders['FECHA_ENTREGA'], errors='coerce')
+                df_orders = df_orders[(df_orders['FECHA_ENTREGA'] <= horizonte) | (df_orders['FECHA_ENTREGA'].isna())].copy()
 
-        if 'PENDIENT.' in df_orders.columns:
-            df_orders['PENDIENT.'] = pd.to_numeric(df_orders['PENDIENT.'], errors='coerce').fillna(0)
-            df_demanda = df_orders.groupby('ARTICULO')['PENDIENT.'].sum().reset_index()
+        if 'CANT_PENDIENTE' in df_orders.columns:
+            df_orders['CANT_PENDIENTE'] = pd.to_numeric(df_orders['CANT_PENDIENTE'], errors='coerce').fillna(0)
+            df_demanda = df_orders.groupby('ARTICULO')['CANT_PENDIENTE'].sum().reset_index()
             df_demanda.columns = ['ARTICULO_lake', 'DEMANDA_ACTUAL']
             return df_demanda
         
@@ -224,9 +224,9 @@ def get_stock_actual():
         df_stock = pd.read_parquet(latest_parquet)
         df_stock.columns = [str(c).strip().upper() for c in df_stock.columns]
         
-        if 'ARTICULO' in df_stock.columns and 'STOCK' in df_stock.columns:
-            df_stock['STOCK'] = pd.to_numeric(df_stock['STOCK'], errors='coerce').fillna(0)
-            df_res = df_stock.groupby('ARTICULO')['STOCK'].sum().reset_index()
+        if 'ARTICULO' in df_stock.columns and 'CANTIDAD' in df_stock.columns:
+            df_stock['CANTIDAD'] = pd.to_numeric(df_stock['CANTIDAD'], errors='coerce').fillna(0)
+            df_res = df_stock.groupby('ARTICULO')['CANTIDAD'].sum().reset_index()
             df_res.columns = ['ARTICULO_lake', 'STOCK_ACTUAL']
             return df_res
         

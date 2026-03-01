@@ -246,7 +246,7 @@ async def get_hub_stats():
             SELECT AVG(Carga_Dia / 16.0) as sat_avg 
             FROM carga_centros
             WHERE Centro NOT LIKE '9%' 
-            AND Fecha > current_date() - INTERVAL 30 DAY
+            AND TRY_CAST(Fecha AS DATE) > current_date() - INTERVAL 30 DAY
         """, one=True)
         
         # 3. Cobertura (Analítica Core) - Mantenemos como está o delegamos

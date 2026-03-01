@@ -82,7 +82,8 @@ async function loadSimulation(scenarioId) {
         if (scenarioId === 'base') baseData = currentData;
 
         currentScenarioId = scenarioId;
-        const sName = scenarioId === 'base' ? 'Escenario Base' : scenarios.find(s => s.id == scenarioId)?.name || 'Escenario';
+        const baseName = isModeActual ? 'Escenario Actual (ERP)' : 'Escenario Base';
+        const sName = scenarioId === 'base' ? baseName : scenarios.find(s => s.id == scenarioId)?.name || 'Escenario';
         document.getElementById('current-scenario-name').innerText = sName;
 
         if (scenarioId !== 'base' && currentData.meta) {
