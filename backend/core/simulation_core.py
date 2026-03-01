@@ -4,6 +4,7 @@ import time
 import functools
 from sqlalchemy.orm import Session
 from typing import List
+from datetime import datetime, timedelta
 
 # Configuración de rutas para RPK NEXUS
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -166,10 +167,103 @@ def calculate_saturation(df: pd.DataFrame, dias_laborales_override: int = None, 
     
     return df
 
+def get_pedidos_actuales(dias_laborales: int = None):
+    try:
+        pedidos_dir = os.path.join(BASE_DIR, "data_lake", "transaccional", "pedidos")
+        if not os.path.exists(pedidos_dir):
+            return None
+
+        years = sorted([d for d in os.listdir(pedidos_dir) if d.startswith("year=")], reverse=True)
+        if not years: return None
+        
+        months = sorted([d for d in os.listdir(os.path.join(pedidos_dir, years[0])) if d.startswith("month=")], reverse=True)
+        if not months: return None
+        
+        day_dir = os.path.join(pedidos_dir, years[0], months[0])
+        files = sorted([f for f in os.listdir(day_dir) if f.endswith(".parquet")], reverse=True)
+        if not files: return None
+        
+        latest_parquet = os.path.join(day_dir, files[0])
+        df_orders = pd.read_parquet(latest_parquet)
+        df_orders.columns = [str(c).strip().upper() for c in df_orders.columns]
+
+        if dias_laborales is not None:
+            horizonte = datetime.now() + timedelta(days=int(dias_laborales))
+            if 'F.ENT.PREV' in df_orders.columns:
+                df_orders['F.ENT.PREV'] = pd.to_datetime(df_orders['F.ENT.PREV'], errors='coerce')
+                df_orders = df_orders[(df_orders['F.ENT.PREV'] <= horizonte) | (df_orders['F.ENT.PREV'].isna())].copy()
+
+        if 'PENDIENT.' in df_orders.columns:
+            df_orders['PENDIENT.'] = pd.to_numeric(df_orders['PENDIENT.'], errors='coerce').fillna(0)
+            df_demanda = df_orders.groupby('ARTICULO')['PENDIENT.'].sum().reset_index()
+            df_demanda.columns = ['ARTICULO_lake', 'DEMANDA_ACTUAL']
+            return df_demanda
+        
+        return None
+    except Exception as e:
+        print(f"[ERROR] Error en get_pedidos_actuales: {e}")
+        return None
+
+def get_stock_actual():
+    try:
+        stock_dir = os.path.join(BASE_DIR, "data_lake", "transaccional", "existencias")
+        if not os.path.exists(stock_dir):
+            return None
+        
+        years = sorted([d for d in os.listdir(stock_dir) if d.startswith("year=")], reverse=True)
+        if not years: return None
+        
+        months = sorted([d for d in os.listdir(os.path.join(stock_dir, years[0])) if d.startswith("month=")], reverse=True)
+        if not months: return None
+        
+        day_dir = os.path.join(stock_dir, years[0], months[0])
+        files = sorted([f for f in os.listdir(day_dir) if f.endswith(".parquet")], reverse=True)
+        if not files: return None
+        
+        latest_parquet = os.path.join(day_dir, files[0])
+        df_stock = pd.read_parquet(latest_parquet)
+        df_stock.columns = [str(c).strip().upper() for c in df_stock.columns]
+        
+        if 'ARTICULO' in df_stock.columns and 'STOCK' in df_stock.columns:
+            df_stock['STOCK'] = pd.to_numeric(df_stock['STOCK'], errors='coerce').fillna(0)
+            df_res = df_stock.groupby('ARTICULO')['STOCK'].sum().reset_index()
+            df_res.columns = ['ARTICULO_lake', 'STOCK_ACTUAL']
+            return df_res
+        
+        return None
+    except Exception as e:
+        print(f"[ERROR] Error en get_stock_actual: {e}")
+        return None
+
 @time_it
-def get_simulation_data(db: Session, scenario_id: int = None, dias_laborales: int = None, overrides_list: List = None, horas_turno: int = None, center_configs: dict = None):
+def get_simulation_data(db: Session, scenario_id: int = None, dias_laborales: int = None, overrides_list: List = None, horas_turno: int = None, center_configs: dict = None, use_actual: bool = False):
     # En lugar de pd.read_excel, usamos la caché
     df = get_base_dataframe()
+    
+    # --- Lógica de Camino Dorado (V2) ---
+    if use_actual:
+        df_pedidos = get_pedidos_actuales(dias_laborales)
+        df_stock = get_stock_actual()
+        
+        if df_pedidos is not None:
+            # Mergear vectorizadamente por artículo
+            df = df.merge(df_pedidos, left_on='Articulo', right_on='ARTICULO_lake', how='left')
+            df['DEMANDA_ACTUAL'] = df['DEMANDA_ACTUAL'].fillna(0)
+            
+            if df_stock is not None:
+                df = df.merge(df_stock, left_on='Articulo', right_on='ARTICULO_lake', how='left')
+                df['STOCK_ACTUAL'] = df['STOCK_ACTUAL'].fillna(0)
+                # Demanda Neta (Evitando valores negativos con clip)
+                df['Volumen anual'] = (df['DEMANDA_ACTUAL'] - df['STOCK_ACTUAL']).clip(lower=0)
+                
+                # Limpiamos las columnas temporales del merge
+                df = df.drop(columns=['ARTICULO_lake_x', 'ARTICULO_lake_y', 'DEMANDA_ACTUAL', 'STOCK_ACTUAL'], errors='ignore')
+            else:
+                df['Volumen anual'] = df['DEMANDA_ACTUAL']
+                df = df.drop(columns=['ARTICULO_lake', 'DEMANDA_ACTUAL'], errors='ignore')
+        else:
+            df['Volumen anual'] = 0
+    # ------------------------------------
     
     # Asegurar que horas_turno es entero
     h_turno = int(horas_turno) if horas_turno is not None else 16
