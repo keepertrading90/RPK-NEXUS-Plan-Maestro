@@ -1,26 +1,84 @@
-# BLUEPRINT_NEXUS v5.5
+# BLUEPRINT_NEXUS v5.5 (Release Candidate - Marzo 2026)
 Este documento es la **fuente de la verdad arquitectónica** para la IA y los desarrolladores humanos de acuerdo al protocolo de Industria 5.0.
 
-## RESTICCIONES Y CARRILES
-- **Carril A (Transaccional - SQLite)**: Para mutaciones de datos del usuario, guardar escenarios y configuraciones (server_nexus.py).
-- **Carril B (Analítico - DuckDB/Parquet)**: Para lectura masiva de Tiempos, Pedidos, Stock y Albaranes. Los endpoints `/api/summary` o `/api/fechas` tiran contra `rpk_analytical.duckdb` y los parquets generados por `etl_nexus_master.py`. Prohibido openpyxl, usar calamine / polars / pyarrow.
-- **Python Portable**: Siempre ejecutar usando `_SISTEMA\runtime_python\python.exe`.
+---
+
+## RESTRICCIONES Y CARRILES
+
+| Carril | Motor | Propósito |
+|--------|-------|-----------|
+| **Carril A (Transaccional)** | SQLite | Mutaciones de usuario, escenarios, configuraciones |
+| **Carril B (Analítico)** | DuckDB + Parquet | Lecturas masivas de Tiempos, Pedidos, Stock y Albaranes |
+
+- **Python Portable**: Siempre `_SISTEMA\runtime_python\python.exe`
+- **Vectorización Obligatoria**: Pandas/NumPy. Prohibido `for` o `.iterrows()`.
+- **Lectura Excel**: Solo `calamine`. Prohibido `openpyxl` para lectura masiva.
+
+---
 
 ## ESTRUCTURA DEL BACKEND (Python 3.12 / FastAPI)
-- **Framework**: FastAPI
-- **Vectorización Obligatoria**: Pandas/NumPy para cálculos. Prohibido usar bucles `for` o `.iterrows()`.
-- **Motor ETL (Lakehouse)**:
-  - Script central: `scripts/etl_nexus_master.py`. Escribe Parquets particionados en `backend/data_lake/`.
-  - Conexion Analitica: `backend/db/rpk_analytical.duckdb`. Contiene vistas mapeadas a los parquets en modo "Graceful Degradation".
-- **Nuevos Endpoints**:
-  - `POST /api/reports/stock-pdf`: Generación de informes en PDF de Inventario Financiero utilizando ReportLab (`backend/api/pdf_stock.py`).
 
-## ESTRUCTURA DEL FRONTEND (HTML/JS Vanilla y Next.js)
-- **Diseño System**: TailwindCSS, CSS Variables. RPK Red `#E30613`, Dark bg `#0f0f0f`.
-- **Módulo de Stock**: Interfaz Vanilla en `frontend/modules/stock/index.html` con sistema de descarga de PDF.
-- **Módulo de Albaranes**: Interfaz Vanilla en `frontend/modules/albaranes/index.html` con KPIs financieros y analítica evolutiva.
-- **Componentes React**: Ubicados bajo Next.js App Router (si aplica en el futuro).
+### Motor ETL — Data Lakehouse
+- **ETL Diario**: `scripts/etl_nexus_master.py` — Escribe Parquets particionados `year=/month=/`.
+- **ETL Histórico**: `scripts/etl_historical_master.py` — Ingesta masiva de archivos históricos de red (`Y:\`).
+- **Analytics DB**: `backend/db/rpk_analytical.duckdb` — Contiene vistas mapeadas con `union_by_name` (resiliencia de esquema).
+- **Dominos**: existencias, carga_centros, carga_detalle, pedidos, **albaranes**.
 
-## DICCIONARIO DE DATOS (Contratos)
-* FastAPI: Las respuestas siempre deben contener `status`, `data` y `message`.
-* Interfaces TS: Situadas en `src/types/` (si Next.js está en uso). En `index.html` se consumen endpoints como `/api/summary` y `/api/reports/stock-pdf`.
+### Endpoints API REST (`backend/server_nexus.py`)
+
+| Endpoint | Método | Descripción |
+|----------|--------|-------------|
+| `/api/fechas` | GET | Rango de fechas disponibles en el Lakehouse |
+| `/api/summary` | GET | KPIs de stock y top clientes con filtro fecha |
+| `/api/customers` | GET | Top clientes de Stock por periodo |
+| `/api/pedidos/summary` | GET | KPIs de pedidos pendientes + evolución |
+| `/api/pedidos/articulos` | GET | Top artículos con cartera |
+| `/api/tiempos/summary` | GET | KPIs de carga y tiempos por centro |
+| `/api/albaranes/resumen` | GET | KPIs albaranado + evolución diaria |
+| `/api/albaranes/clientes` | GET | Top clientes por importe albaranado |
+| `/api/albaranes/articulos` | GET | Top artículos expedidos |
+| `/api/reports/stock-pdf` | POST | Generación PDF Stock (`backend/api/pdf_stock.py`) |
+| `/api/reports/tiempos-pdf` | POST | Generación PDF Tiempos (`backend/api/pdf_tiempos.py`) |
+| `/api/reports/pedidos-pdf` | POST | Generación PDF Pedidos (`backend/api/pdf_pedidos.py`) |
+
+### Resiliencia de Red
+- Todo acceso a `Y:\` envuelto en `try/except`. Si hay file lock → `logging.warning` + terminación silenciosa.
+
+---
+
+## ESTRUCTURA DEL FRONTEND (HTML/JS Vanilla)
+
+### Design System
+- **Paleta RPK**: Fondo `#0f0f0f`, Paneles `#1a1a1a`, Acento `#E30613`, Texto `#ffffff / #9ca3af`
+- **Tipografía**: Inter (Google Fonts)
+- **Estética**: Glassmorphism Dark Mode (`backdrop-filter: blur`)
+- **Gráficos**: Chart.js
+
+### Módulos (`frontend/modules/`)
+
+| Módulo | Ruta Servida | Archivo HTML |
+|--------|-------------|--------------|
+| Portal Central | `/portal/` | `frontend/ui/index.html` |
+| Stock y Almacén | `/mod/stock/` | `frontend/modules/stock/index.html` |
+| Carga y Tiempos | `/mod/tiempos/` | `frontend/modules/tiempos/index.html` |
+| Pedidos de Venta | `/mod/pedidos/` | `frontend/modules/pedidos/index.html` |
+| Albaranes | `/mod/albaranes/` | `frontend/modules/albaranes/index.html` |
+| Simulador | `/mod/simulador/` | `frontend/modules/simulador/index.html` |
+
+---
+
+## DICCIONARIO DE DATOS (Contratos API)
+
+- **Respuesta estándar**: `{"status": "success|error", "data": [...], "message": "..."}`
+- **Graceful Degradation**: Si el Parquet del día no existe → sirve el de ayer con flag `{"warning": "Using stale data"}`.
+- **Parquets Transaccionales**: Particionados `year=YYYY/month=MM/` → nunca sobreescriben.
+- **Parquets Maestros (Snapshots)**: Se sobreescriben como `snapshot_actual.parquet`.
+
+---
+
+## HISTORIAL DE VERSIONES
+
+| Fecha | Versión | Cambios |
+|-------|---------|---------|
+| Feb 2026 | v5.5 RC | Motor ETL Data Lakehouse, UI Glassmorphism, PDF Reports (Stock, Tiempos, Pedidos), Módulo Albaranes |
+| Ene 2026 | v5.0 | Base FastAPI + DuckDB |
