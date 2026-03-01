@@ -84,7 +84,8 @@
                         <span>Actualizar</span>
                     </button>
                     <button class="btn-rpk" id="btn-export"
-                        style="background: var(--surface-glass); border: 1px solid var(--border-glass);">
+                        style="background: var(--surface-glass); border: 1px solid var(--border-glass);"
+                        onclick="openPdfModalTiempos()" title="Exportar Informe PDF">
                         <i data-lucide="download"></i>
                     </button>
                 </div>
@@ -251,11 +252,140 @@
         </div>
     </div>
 
+    <!-- Modal Reporte PDF (Tiempos) -->
+    <div id="pdfModalTiempos" class="overlay" style="display: none;">
+        <div class="glass-card modal-content" style="max-width: 500px; padding: 2rem; position: relative;">
+            <button class="btn-rpk" onclick="closePdfModalTiempos()"
+                style="position: absolute; top: 1rem; right: 1rem; background:transparent; border:none; padding: 0.5rem; color: white; cursor: pointer;">
+                <i data-lucide="x"></i>
+            </button>
+            <div style="margin-bottom: 2rem;">
+                <h2 style="font-size: 1.5rem; font-weight: 700; margin-bottom: 0.5rem;">Generar Informe PDF</h2>
+                <div style="color: var(--text-muted); font-size: 0.9rem;">Workload & Saturation Report</div>
+            </div>
+
+            <div style="margin-bottom: 1rem; display: flex; flex-direction: column; gap: 4px;">
+                <label style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">Fecha de Análisis
+                    (vacío para usar la actual del filtro de fin)</label>
+                <input type="date" id="pdf-date-tiempos"
+                    style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-glass); color: white; padding: 10px; border-radius: 8px; width: 100%;">
+            </div>
+
+            <div style="margin-bottom: 2rem; display: flex; flex-direction: column; gap: 4px;">
+                <label style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">Centro (Opcional)</label>
+                <select id="pdf-centro-tiempos"
+                    style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-glass); color: white; padding: 10px; border-radius: 8px; width: 100%;">
+                    <option value="ALL">Todos los Centros</option>
+                </select>
+            </div>
+
+            <button class="btn-rpk" onclick="downloadPdfTiempos()"
+                style="width: 100%; display: flex; justify-content: center; align-items: center; gap: 10px; background: var(--rpk-red); padding: 12px; border-radius: 8px; border:none; cursor: pointer; color: white;">
+                <span id="pdf-btn-text">Descargar Documento</span>
+                <div id="pdf-loader"
+                    style="width: 16px; height: 16px; border: 2px solid white; border-top-color: transparent; border-radius: 50%; display: none; animation: spin 1s linear infinite;">
+                </div>
+            </button>
+            <style>
+                @keyframes spin {
+                    100% {
+                        transform: rotate(360deg);
+                    }
+                }
+            </style>
+        </div>
+    </div>
+
     <!-- Scripts -->
     <script src="app.js"></script>
     <script>
         // Initialize Lucide icons
         lucide.createIcons();
+
+        // Setup PDF logic
+        async function loadCentrosToSelectPdf() {
+            try {
+                const res = await fetch('/api/centros');
+                const data = await res.json();
+                const sel = document.getElementById('pdf-centro-tiempos');
+                // preserve the "Todos" option, remove the rest if we are reloading
+                sel.innerHTML = '<option value="ALL">Todos los Centros</option>';
+                data.centros.forEach(c => {
+                    if (!c.id.startsWith('9')) { // only non-auxiliary ones, per rules
+                        let opt = document.createElement('option');
+                        opt.value = c.id;
+                        opt.textContent = "Centro " + c.id;
+                        sel.appendChild(opt);
+                    }
+                });
+            } catch (e) {
+                console.error("No se pudieron cargar los centros", e);
+            }
+        }
+
+        function openPdfModalTiempos() {
+            const dateTo = document.getElementById('date-to');
+            if (dateTo && dateTo.value) {
+                document.getElementById('pdf-date-tiempos').value = dateTo.value;
+            }
+            if (document.getElementById('pdf-centro-tiempos').options.length <= 1) {
+                loadCentrosToSelectPdf();
+            }
+            document.getElementById('pdfModalTiempos').style.display = 'flex';
+        }
+
+        function closePdfModalTiempos() {
+            document.getElementById('pdfModalTiempos').style.display = 'none';
+        }
+
+        async function downloadPdfTiempos() {
+            const btnText = document.getElementById('pdf-btn-text');
+            const loader = document.getElementById('pdf-loader');
+
+            btnText.innerText = "Generando PDF...";
+            loader.style.display = "block";
+
+            const reqBody = {
+                fecha_analisis: document.getElementById('pdf-date-tiempos').value || null,
+                centro: document.getElementById('pdf-centro-tiempos').value,
+                incluir_graficos: true
+            };
+
+            try {
+                const response = await fetch('/api/reports/tiempos-pdf', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(reqBody)
+                });
+
+                if (!response.ok) throw new Error("Error al generar PDF de Tiempos");
+
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                let filename = `Workload_Saturation_${new Date().toISOString().slice(0, 10)}.pdf`;
+                const disposition = response.headers.get('Content-Disposition');
+                if (disposition && disposition.indexOf('attachment') !== -1) {
+                    const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition);
+                    if (matches != null && matches[1]) {
+                        filename = matches[1].replace(/['"]/g, '');
+                    }
+                }
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                closePdfModalTiempos();
+            } catch (error) {
+                console.error(error);
+                alert("Error generando el informe: " + error.message);
+            } finally {
+                btnText.innerText = "Descargar Documento";
+                loader.style.display = "none";
+            }
+        }
     </script>
 </body>
 

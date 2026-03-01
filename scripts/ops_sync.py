@@ -10,6 +10,6 @@ def main():
     # Usar comillas dobles escapadas para el mensaje de commit en Windows
     msg = sys.argv[1].replace('"', '\"')
     os.system(f'git commit -m "{msg}"')
-    os.system("git push origin main")
+    os.system("git push -u origin HEAD")
 if __name__ == "__main__":
     main()
