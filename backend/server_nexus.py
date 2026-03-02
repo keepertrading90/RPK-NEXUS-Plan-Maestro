@@ -835,6 +835,102 @@ async def get_ingest_status():
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+# --- ENDPOINTS V6 (Frontend React) ---
+# Endpoints dedicados sin dependencia del header referer
+
+@app.get("/api/v6/stock/summary")
+async def get_stock_summary_v6(fecha_inicio: str = None, fecha_fin: str = None):
+    """Resumen de Stock para el frontend React V6."""
+    try:
+        latest = query_duckdb("SELECT MAX(Fecha) as f FROM existencias", one=True)
+        if not latest or 'warning' in latest:
+            return {"kpis": {"total_cantidad": 0, "total_valor": 0, "num_articulos": 0}, "articulos": [], "warning": "Using stale data"}
+        
+        actual_latest = fecha_fin if fecha_fin else latest['f']
+        
+        kpis = query_duckdb("""
+            SELECT SUM(Cantidad) as total_cantidad, SUM(Valor_Total) as total_valor, 
+                   COUNT(DISTINCT Articulo) as num_articulos
+            FROM existencias WHERE Fecha = ?
+        """, (actual_latest,), one=True)
+        
+        articulos = query_duckdb("""
+            SELECT Articulo as articulo, Descripcion as descripcion, 
+                   SUM(Cantidad) as cantidad, SUM(Valor_Total) as valor
+            FROM existencias WHERE Fecha = ?
+            GROUP BY Articulo, Descripcion ORDER BY valor DESC LIMIT 100
+        """, (actual_latest,))
+        
+        return {
+            "kpis": dict(kpis) if kpis else {"total_cantidad": 0, "total_valor": 0, "num_articulos": 0},
+            "articulos": [dict(r) for r in articulos] if articulos else [],
+            "ultima_fecha": str(actual_latest)
+        }
+    except Exception as e:
+        return {"kpis": {"total_cantidad": 0, "total_valor": 0, "num_articulos": 0}, "articulos": [], "error": str(e)}
+
+@app.get("/api/v6/stock/customers")
+async def get_stock_customers_v6():
+    """Top clientes de Stock para el frontend React V6."""
+    try:
+        latest = query_duckdb("SELECT MAX(Fecha) as f FROM existencias", one=True)
+        if not latest or 'warning' in latest:
+            return {"clientes": []}
+        custs = query_duckdb("""
+            SELECT Cliente as cliente, SUM(Valor_Total) as valor, SUM(Cantidad) as cantidad
+            FROM existencias WHERE Fecha = ?
+            GROUP BY Cliente ORDER BY valor DESC LIMIT 15
+        """, (latest['f'],))
+        return {"clientes": [dict(r) for r in custs] if custs else []}
+    except Exception as e:
+        return {"clientes": [], "error": str(e)}
+
+@app.get("/api/v6/tiempos/summary")
+async def get_tiempos_summary_v6(fecha_inicio: str = None, fecha_fin: str = None):
+    """Resumen de Carga y Tiempos para el frontend React V6."""
+    try:
+        q = "SELECT Fecha, Centro, Carga_Dia FROM carga_centros WHERE Centro NOT LIKE '9%'"
+        params = []
+        if fecha_inicio: q += " AND Fecha >= ?"; params.append(fecha_inicio)
+        if fecha_fin: q += " AND Fecha <= ?"; params.append(fecha_fin)
+        
+        data = query_duckdb(q, tuple(params))
+        if not data or (isinstance(data, dict) and 'warning' in data):
+            return {"kpis": {"total_carga_h": 0, "total_setup_h": 0, "media_oee": 0, "saturacion_general": 0}, "centros": [], "rankings": {"top_saturados": [], "top_libres": []}}
+        
+        df = pd.DataFrame(data)
+        num_dias = df['Fecha'].nunique()
+        horas_turno = 16
+        
+        ranking = df.groupby('Centro')['Carga_Dia'].agg(['sum', 'mean']).reset_index()
+        ranking.columns = ['centro', 'carga_total', 'carga_media']
+        ranking['saturacion'] = (ranking['carga_media'] / horas_turno * 100).round(1)
+        ranking['carga_h'] = ranking['carga_total'].round(1)
+        ranking['setup_h'] = (ranking['carga_total'] * 0.1).round(1)  # Estimación 10%
+        ranking['oee'] = 85.0  # Default OEE
+        ranking = ranking.sort_values('saturacion', ascending=False)
+        
+        centros_list = ranking.to_dict('records')
+        total_carga = float(ranking['carga_h'].sum())
+        total_setup = float(ranking['setup_h'].sum())
+        sat_media = float(ranking['saturacion'].mean()) if len(ranking) > 0 else 0
+        
+        return {
+            "kpis": {
+                "total_carga_h": round(total_carga, 1),
+                "total_setup_h": round(total_setup, 1),
+                "media_oee": 85.0,
+                "saturacion_general": round(sat_media, 1)
+            },
+            "centros": centros_list,
+            "rankings": {
+                "top_saturados": centros_list[:5],
+                "top_libres": list(reversed(centros_list[-5:])) if len(centros_list) >= 5 else list(reversed(centros_list))
+            }
+        }
+    except Exception as e:
+        return {"kpis": {"total_carga_h": 0, "total_setup_h": 0, "media_oee": 0, "saturacion_general": 0}, "centros": [], "rankings": {"top_saturados": [], "top_libres": []}, "error": str(e)}
+
 # --- ENDPOINTS ALBARANES ---
 
 @app.get("/api/albaranes/resumen")

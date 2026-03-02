@@ -46,14 +46,14 @@ export default function StockPage() {
             const qs = params.toString() ? '?' + params.toString() : '';
 
             const [summaryRes, clientesRes] = await Promise.all([
-                fetch(`/api/summary${qs}`),
-                fetch(`/api/customers${qs}`),
+                fetch(`/api/v6/stock/summary${qs ? qs.replace('start=', 'fecha_inicio=').replace('end=', 'fecha_fin=') : ''}`),
+                fetch(`/api/v6/stock/customers`),
             ]);
             const summaryData = await summaryRes.json();
             const clientesData = await clientesRes.json();
 
             if (summaryData.kpis) setKpis(summaryData.kpis);
-            if (clientesData.clientes) setClientes(clientesData.clientes);
+            if (clientesData.clientes) setClientes(clientesData.clientes.map((c: Record<string, unknown>) => ({ cliente: String(c.cliente || ''), cantidad: Number(c.cantidad || 0), valor: Number(c.valor || 0) })));
             if (summaryData.articulos) setArticulos(summaryData.articulos);
         } catch { /* graceful degradation */ }
         finally { setIsLoading(false); }
@@ -77,8 +77,8 @@ export default function StockPage() {
                     {[{ id: 'summary' as const, label: '📊 Resumen General' }, { id: 'ranking' as const, label: '📦 Análisis por Artículo' }].map(s => (
                         <button key={s.id} onClick={() => setSection(s.id)}
                             className={`text-left px-4 py-3 rounded-xl text-sm font-medium border-none cursor-pointer transition-all ${section === s.id
-                                    ? 'bg-[var(--color-rpk-red)]/10 text-[var(--color-rpk-red)] border-l-2 border-[var(--color-rpk-red)]'
-                                    : 'text-[var(--color-text-muted)] hover:text-white hover:bg-white/5'
+                                ? 'bg-[var(--color-rpk-red)]/10 text-[var(--color-rpk-red)] border-l-2 border-[var(--color-rpk-red)]'
+                                : 'text-[var(--color-text-muted)] hover:text-white hover:bg-white/5'
                                 }`}
                         >{s.label}</button>
                     ))}
