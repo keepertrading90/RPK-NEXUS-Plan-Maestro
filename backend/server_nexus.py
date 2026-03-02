@@ -145,6 +145,49 @@ def query_duckdb(query, args=(), one=False):
         print(f"DuckDB Error: {e}")
         return None
 
+# --- ENDPOINT PARQUET PARA DUCKDB WASM (Frontend V6) ---
+DATA_LAKE_DIR = BASE_DIR / "backend" / "data_lake"
+
+PARQUET_TABLE_MAP = {
+    "existencias": {"maestro": "maestros/existencias.parquet", "transaccional": "transaccional/existencias"},
+    "carga_centros": {"maestro": "maestros/carga_centros.parquet", "transaccional": "transaccional/carga_centros"},
+    "pedidos": {"transaccional": "transaccional/pedidos"},
+    "albaranes": {"transaccional": "transaccional/albaranes"},
+    "carga_detalle": {"transaccional": "transaccional/carga_detalle"},
+}
+
+def _find_latest_parquet(table_name: str) -> Path:
+    """Busca el Parquet más reciente para una tabla dada."""
+    config = PARQUET_TABLE_MAP.get(table_name)
+    if not config:
+        raise HTTPException(status_code=404, detail=f"Tabla '{table_name}' no encontrada")
+    
+    # Primero intentar maestro (snapshot actual)
+    if "maestro" in config:
+        maestro_path = DATA_LAKE_DIR / config["maestro"]
+        if maestro_path.exists():
+            return maestro_path
+    
+    # Fallback a transaccional (más reciente)
+    if "transaccional" in config:
+        trans_dir = DATA_LAKE_DIR / config["transaccional"]
+        if trans_dir.exists():
+            all_parquets = sorted(trans_dir.rglob("*.parquet"), key=lambda p: p.stat().st_mtime, reverse=True)
+            if all_parquets:
+                return all_parquets[0]
+    
+    raise HTTPException(status_code=404, detail=f"Sin datos para '{table_name}'")
+
+@app.get("/api/parquet/{table_name}")
+async def serve_parquet(table_name: str):
+    """Sirve el Parquet más reciente de una tabla para DuckDB WASM."""
+    path = _find_latest_parquet(table_name)
+    return FileResponse(
+        path,
+        media_type="application/octet-stream",
+        headers={"Cache-Control": "public, max-age=300"}
+    )
+
 # --- ENDPOINTS DE INTERFAZ (UI) ---
 
 @app.get("/")
