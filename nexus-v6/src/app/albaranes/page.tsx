@@ -34,8 +34,8 @@ export default function AlbaranesPage() {
         setIsLoading(true);
         try {
             const params = new URLSearchParams();
-            if (start) params.set('start', start);
-            if (end) params.set('end', end);
+            if (start) params.set('fecha_inicio', start);
+            if (end) params.set('fecha_fin', end);
             const qs = params.toString() ? '?' + params.toString() : '';
 
             const [resumenRes, clientesRes] = await Promise.all([

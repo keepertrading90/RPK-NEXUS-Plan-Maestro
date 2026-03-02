@@ -33,7 +33,7 @@ export default function TiemposPage() {
     const [selectedCentro, setSelectedCentro] = useState<string | null>(null);
 
     useEffect(() => {
-        fetch('/api/tiempos/summary')
+        fetch('/api/v6/tiempos/summary')
             .then(r => r.json())
             .then(d => { setData(d); setIsLoading(false); })
             .catch(() => setIsLoading(false));
@@ -54,8 +54,8 @@ export default function TiemposPage() {
                     {(['dashboard', 'ranking'] as const).map(tab => (
                         <button key={tab} onClick={() => setActiveTab(tab)}
                             className={`px-4 py-2 rounded-lg text-sm font-medium border-none cursor-pointer transition-all ${activeTab === tab
-                                    ? 'bg-[var(--color-rpk-red)] text-white shadow-[0_0_10px_rgba(227,6,19,0.3)]'
-                                    : 'bg-[var(--color-dark-surface-2)] text-[var(--color-text-muted)] hover:text-white'
+                                ? 'bg-[var(--color-rpk-red)] text-white shadow-[0_0_10px_rgba(227,6,19,0.3)]'
+                                : 'bg-[var(--color-dark-surface-2)] text-[var(--color-text-muted)] hover:text-white'
                                 }`}
                         >
                             {tab === 'dashboard' ? '📊 Dashboard' : '🏆 Ranking'}
