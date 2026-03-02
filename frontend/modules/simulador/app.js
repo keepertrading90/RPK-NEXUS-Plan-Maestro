@@ -897,72 +897,60 @@ function enterComparisonMode() {
         banner.style.display = 'flex';
         banner.innerHTML = `
             <div style="display: flex; align-items: center; gap: 1rem;">
-                <span class="pill-info" style="background:#000; color:#ffc107; border-color:#ffc107">MODO COMPARATIVA</span>
+                <span class="pill-info" style="background:#000; color:#ffc107; border-color:#ffc107">MODO COMPARATIVA KPI</span>
                 <span style="font-size: 0.9rem;">${comparisonData.nameA} <span style="opacity:0.6">vs</span> <strong>${comparisonData.nameB}</strong></span>
             </div>
             <button id="btn-exit-compare" class="action-btn small" onclick="exitComparisonMode()" style="background:#000; color:#fff; border:1px solid #444">Cerrar Comparativa</button>
         `;
     }
 
-    // Hide standard control bar to maximize space
     const controlBar = document.querySelector('.control-bar');
     if (controlBar) controlBar.style.display = 'none';
 
-    // Restructure Dashboard to Bento
     const dashboardGrid = document.querySelector('.dashboard-grid');
     if (dashboardGrid) {
-        dashboardGrid.className = 'bento-grid';
+        dashboardGrid.className = 'bento-pro';
         dashboardGrid.innerHTML = `
-            <!-- Large Tile: Chart -->
-            <div class="bento-item bento-large chart-card">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                    <h4 style="margin: 0; font-size: 1rem;">Comparativa de Carga por Centro</h4>
-                    <button id="btn-toggle-delta" class="action-btn small secondary" onclick="toggleComparisonView()" style="padding: 0.2rem 0.5rem; font-size: 0.7rem;">Ver Variación (%)</button>
-                </div>
-                <div class="chart-container" style="height: 350px;">
-                    <canvas id="saturationChart"></canvas>
-                </div>
-                <div class="ghost-bar-legend">
-                    <div style="display: flex; align-items: center; gap: 5px;"><div class="legend-color" style="background: #666"></div> ${comparisonData.nameA}</div>
-                    <div style="display: flex; align-items: center; gap: 5px;"><div class="legend-color" style="background: var(--rpk-red)"></div> ${comparisonData.nameB}</div>
+            <!-- Tile 1: Radar Multi-KPI -->
+            <div class="tile-radar">
+                <div class="kpi-header">Radar Multi-KPI — 5 Dimensiones</div>
+                <div class="radar-container">
+                    <div class="radar-chart-wrap"><canvas id="radarChart"></canvas></div>
+                    <div class="radar-legend" id="radar-legend"></div>
                 </div>
             </div>
 
-            <!-- Tile: Net Impact -->
-            <div class="bento-item bento-small" id="tile-impact">
-                <div class="insight-header">Impacto Neto</div>
-                <div class="insight-value" id="val-impact">--</div>
-                <div class="insight-label">Capacidad vs ${comparisonData.nameA}</div>
-                <div id="delta-impact-badge"></div>
-            </div>
-
-            <!-- Tile: OEE Evolution -->
-            <div class="bento-item bento-small" id="tile-oee">
-                <div class="insight-header">Evolución OEE</div>
-                <div class="insight-value" id="val-oee">--</div>
-                <div class="insight-label">Promedio ponderado</div>
-                <div id="delta-oee-badge"></div>
-            </div>
-
-            <!-- Tile: Headcount (FTE) -->
-            <div class="bento-item bento-small" id="tile-headcount">
-                <div class="insight-header">Personal (FTE)</div>
-                <div class="insight-value" id="val-headcount">--</div>
-                <div class="insight-label">Basado en Ratio MOD</div>
-                <div id="delta-headcount-badge"></div>
-            </div>
-
-            <!-- Tile: Top Changes -->
-            <div class="bento-item bento-medium" id="tile-changes">
-                <div class="insight-header">Cambios Críticos</div>
-                <div id="top-changes-list" style="margin-top: 0.5rem;">
-                    <!-- JS Generated -->
+            <!-- Tile 2: Gauge Eficiencia + Riesgo -->
+            <div class="tile-gauge">
+                <div class="kpi-header">Eficiencia Global de Planta</div>
+                <div class="gauge-container" id="gauge-container"></div>
+                <div style="margin-top: 16px;">
+                    <div class="kpi-header">Riesgo Operativo</div>
+                    <div id="risk-score-container"></div>
                 </div>
+            </div>
+
+            <!-- Tile 3: Heatmap Variación -->
+            <div class="tile-heatmap">
+                <div class="kpi-header">Heatmap — Variación Saturación por Centro</div>
+                <div class="heatmap-grid" id="heatmap-grid"></div>
+            </div>
+
+            <!-- Tile 4: Waterfall Capacidad -->
+            <div class="tile-waterfall">
+                <div class="kpi-header">Waterfall — Delta Capacidad (horas)</div>
+                <div class="waterfall-container"><canvas id="waterfallChart"></canvas></div>
+            </div>
+
+            <!-- Tile 5: Decisiones + Recomendaciones -->
+            <div class="tile-decisions">
+                <div class="kpi-header">Semáforo de Decisión</div>
+                <div class="semaphore-list" id="semaphore-list"></div>
+                <div id="recommendation-container" style="margin-top: 12px;"></div>
             </div>
         `;
     }
 
-    // Set table to glass style
     const tableCard = document.querySelector('.table-card');
     if (tableCard) tableCard.classList.add('glass-table');
 
@@ -970,133 +958,306 @@ function enterComparisonMode() {
     document.getElementById('table-search').value = '';
 
     updateNavItemActive();
-    renderComparisonDashboard();
-    renderComparisonTable();
     renderExecutiveInsights();
-    triggerDashboardAnimation();
+    renderComparisonTable();
 }
 
+let radarChartInstance = null;
+let waterfallChartInstance = null;
+
 function renderExecutiveInsights() {
-    if (!comparisonData || !comparisonData.dataA || !comparisonData.dataB) {
-        console.warn("Faltan datos para insights ejecutivos.");
-        return;
-    }
+    if (!comparisonData || !comparisonData.dataA || !comparisonData.dataB) return;
 
     const summaryA = comparisonData.dataA.summary || [];
     const summaryB = comparisonData.dataB.summary || [];
     const detailA = comparisonData.dataA.detail || [];
     const detailB = comparisonData.dataB.detail || [];
-
-    // 1. Calculate Net Impact (Capacity)
-    const avgA = summaryA.length > 0 ? (summaryA.reduce((acc, s) => acc + (s.Saturacion || 0), 0) / summaryA.length) : 0;
-    const avgB = summaryB.length > 0 ? (summaryB.reduce((acc, s) => acc + (s.Saturacion || 0), 0) / summaryB.length) : 0;
-    const deltaAvg = (avgB - avgA) * 100;
-
-    // Total Hours Delta
-    const totalHoursA = detailA.reduce((acc, d) => acc + (d['Horas_Totales'] || 0), 0);
-    const totalHoursB = detailB.reduce((acc, d) => acc + (d['Horas_Totales'] || 0), 0);
-    const hourDelta = totalHoursB - totalHoursA;
-
-    const impactVal = document.getElementById('val-impact');
-    if (impactVal) {
-        impactVal.innerText = `${Math.abs(deltaAvg).toFixed(1)}%`;
-        const badge = document.getElementById('delta-impact-badge');
-        if (deltaAvg > 0.01) {
-            impactVal.style.color = 'var(--rpk-red)';
-            badge.innerHTML = `<span class="insight-delta delta-neg">▲ +${Math.abs(hourDelta).toFixed(0)}h req. extra</span>`;
-        } else if (deltaAvg < -0.01) {
-            impactVal.style.color = '#4cd137';
-            badge.innerHTML = `<span class="insight-delta delta-pos">▼ -${Math.abs(hourDelta).toFixed(0)}h optimización</span>`;
-        } else {
-            impactVal.style.color = '#fff';
-            badge.innerHTML = `<span class="insight-delta">● Sin variación neta</span>`;
-        }
-    }
-
-    // 2. OEE Evolution
-    const oeeA = detailA.length > 0 ? (detailA.reduce((acc, d) => acc + (d['%OEE'] || 0), 0) / detailA.length) : 0;
-    const oeeB = detailB.length > 0 ? (detailB.reduce((acc, d) => acc + (d['%OEE'] || 0), 0) / detailB.length) : 0;
-    const deltaOEE = (oeeB - oeeA) * 100;
-
-    const oeeVal = document.getElementById('val-oee');
-    if (oeeVal) {
-        oeeVal.innerText = `${(oeeB * 100).toFixed(1)}%`;
-        const badge = document.getElementById('delta-oee-badge');
-        if (deltaOEE > 0.1) {
-            badge.innerHTML = `<span class="insight-delta delta-pos">▲ +${deltaOEE.toFixed(1)}% vs ${comparisonData.nameA}</span>`;
-        } else if (deltaOEE < -0.1) {
-            badge.innerHTML = `<span class="insight-delta delta-neg">▼ ${deltaOEE.toFixed(1)}% vs ${comparisonData.nameA}</span>`;
-        } else {
-            badge.innerHTML = `<span class="insight-delta">● Estable</span>`;
-        }
-    }
-
-    // 3. Headcount (FTE)
     const daysA = comparisonData.dataA.meta.dias_laborales || 238;
     const daysB = comparisonData.dataB.meta.dias_laborales || 238;
 
-    // Sum Hombres/Horas
-    const sumHHA = detailA.reduce((acc, d) => acc + (d.Horas_Hombre || 0), 0);
-    const sumHHB = detailB.reduce((acc, d) => acc + (d.Horas_Hombre || 0), 0);
+    // ===== CALCULATIONS =====
+    const avgSatA = summaryA.length > 0 ? (summaryA.reduce((a, s) => a + (s.Saturacion || 0), 0) / summaryA.length) * 100 : 0;
+    const avgSatB = summaryB.length > 0 ? (summaryB.reduce((a, s) => a + (s.Saturacion || 0), 0) / summaryB.length) * 100 : 0;
 
-    // FTE theoretical (assuming 8h shift)
+    const oeeA = detailA.length > 0 ? (detailA.reduce((a, d) => a + (d['%OEE'] || 0), 0) / detailA.length) * 100 : 0;
+    const oeeB = detailB.length > 0 ? (detailB.reduce((a, d) => a + (d['%OEE'] || 0), 0) / detailB.length) * 100 : 0;
+
+    const totalHoursA = detailA.reduce((a, d) => a + (d['Horas_Totales'] || 0), 0);
+    const totalHoursB = detailB.reduce((a, d) => a + (d['Horas_Totales'] || 0), 0);
+
+    const setupA = detailA.reduce((a, d) => a + (d['Tiempo_Setup'] || 0), 0);
+    const setupB = detailB.reduce((a, d) => a + (d['Tiempo_Setup'] || 0), 0);
+
+    const sumHHA = detailA.reduce((a, d) => a + (d.Horas_Hombre || 0), 0);
+    const sumHHB = detailB.reduce((a, d) => a + (d.Horas_Hombre || 0), 0);
     const fteA = sumHHA / (daysA * 8);
     const fteB = sumHHB / (daysB * 8);
-    const deltaFTE = fteB - fteA;
 
-    const fteVal = document.getElementById('val-headcount');
-    if (fteVal) {
-        fteVal.innerText = fteB.toFixed(1);
-        const fteBadge = document.getElementById('delta-headcount-badge');
-        if (deltaFTE > 0.1) {
-            fteBadge.innerHTML = `<span class="insight-delta delta-neg">▲ +${deltaFTE.toFixed(1)} FTE vs ${comparisonData.nameA}</span>`;
-        } else if (deltaFTE < -0.1) {
-            fteBadge.innerHTML = `<span class="insight-delta delta-pos">▼ ${deltaFTE.toFixed(1)} FTE vs ${comparisonData.nameA}</span>`;
-        } else {
-            fteBadge.innerHTML = `<span class="insight-delta">● Sin variación</span>`;
+    // Normalize for radar (scale 0-100)
+    const maxHours = Math.max(totalHoursA, totalHoursB, 1);
+    const maxSetup = Math.max(setupA, setupB, 1);
+    const maxFTE = Math.max(fteA, fteB, 1);
+
+    // ===== 1. RADAR CHART =====
+    const radarCtx = document.getElementById('radarChart');
+    if (radarCtx) {
+        if (radarChartInstance) radarChartInstance.destroy();
+        radarChartInstance = new Chart(radarCtx.getContext('2d'), {
+            type: 'radar',
+            data: {
+                labels: ['Saturación', 'OEE', 'Carga (h)', 'Setup (h)', 'FTE'],
+                datasets: [
+                    {
+                        label: comparisonData.nameA,
+                        data: [avgSatA, oeeA, (totalHoursA / maxHours) * 100, (setupA / maxSetup) * 100, (fteA / maxFTE) * 100],
+                        backgroundColor: 'rgba(100, 100, 100, 0.15)',
+                        borderColor: '#666',
+                        borderWidth: 2,
+                        pointBackgroundColor: '#888'
+                    },
+                    {
+                        label: comparisonData.nameB,
+                        data: [avgSatB, oeeB, (totalHoursB / maxHours) * 100, (setupB / maxSetup) * 100, (fteB / maxFTE) * 100],
+                        backgroundColor: 'rgba(227, 6, 19, 0.15)',
+                        borderColor: '#E30613',
+                        borderWidth: 2,
+                        pointBackgroundColor: '#E30613'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                scales: {
+                    r: {
+                        beginAtZero: true,
+                        max: 120,
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                        angleLines: { color: 'rgba(255,255,255,0.05)' },
+                        pointLabels: { color: '#a0a0a0', font: { size: 11, weight: '600' } },
+                        ticks: { display: false }
+                    }
+                },
+                plugins: { legend: { display: false } }
+            }
+        });
+
+        // Radar Legend
+        const legend = document.getElementById('radar-legend');
+        if (legend) {
+            const dims = [
+                { name: 'Saturación', valA: avgSatA.toFixed(1) + '%', valB: avgSatB.toFixed(1) + '%' },
+                { name: 'OEE', valA: oeeA.toFixed(1) + '%', valB: oeeB.toFixed(1) + '%' },
+                { name: 'Carga', valA: totalHoursA.toFixed(0) + 'h', valB: totalHoursB.toFixed(0) + 'h' },
+                { name: 'Setup', valA: setupA.toFixed(0) + 'h', valB: setupB.toFixed(0) + 'h' },
+                { name: 'FTE', valA: fteA.toFixed(1), valB: fteB.toFixed(1) }
+            ];
+            legend.innerHTML = dims.map(d => `
+                <div class="radar-legend-item">
+                    <span style="font-size:0.7rem; color:var(--text-muted)">${d.name}</span>
+                    <span class="leg-val" style="color:#888">${d.valA}</span>
+                    <span style="color:#444">→</span>
+                    <span class="leg-val" style="color:var(--rpk-red)">${d.valB}</span>
+                </div>
+            `).join('');
         }
     }
 
-    // 3. Top 3 Changes
-    const changes = [];
-    const labels = [...new Set([...summaryA.map(s => String(s.Centro)), ...summaryB.map(s => String(s.Centro))])].sort();
-    labels.forEach(label => {
-        const itemA = summaryA.find(s => String(s.Centro) === label) || { Saturacion: 0 };
-        const itemB = summaryB.find(s => String(s.Centro) === label) || { Saturacion: 0 };
-        const diff = (itemB.Saturacion - itemA.Saturacion) * 100;
-        if (Math.abs(diff) > 0.1) {
-            changes.push({ center: label, diff: diff });
-        }
-    });
+    // ===== 2. EFFICIENCY GAUGE =====
+    const gaugeEl = document.getElementById('gauge-container');
+    if (gaugeEl) {
+        const efficiency = Math.min(100, Math.max(0, 100 - avgSatB + oeeB * 0.5));
+        const efficiencyA = Math.min(100, Math.max(0, 100 - avgSatA + oeeA * 0.5));
+        const delta = efficiency - efficiencyA;
+        const deltaClass = delta > 1 ? 'positive' : delta < -1 ? 'negative' : 'neutral';
+        const deltaSign = delta > 0 ? '+' : '';
+        const rotation = -90 + (efficiency / 100) * 180;
 
-    changes.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
-    const topList = document.getElementById('top-changes-list');
-    if (topList) {
-        topList.innerHTML = changes.slice(0, 3).map(c => `
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
-                <span style="font-weight: 600; font-size: 0.85rem;">Centro ${c.center}</span>
-                <span class="${c.diff > 0 ? 'delta-neg' : 'delta-pos'}" style="font-size: 0.8rem; font-weight: 800; padding: 2px 6px; border-radius: 4px;">
-                    ${c.diff > 0 ? '+' : ''}${c.diff.toFixed(1)}%
-                </span>
+        gaugeEl.innerHTML = `
+            <div class="gauge-ring">
+                <div class="gauge-fill" style="transform: rotate(${rotation}deg)"></div>
+                <div class="gauge-value">${efficiency.toFixed(1)}%</div>
             </div>
-        `).join('') || '<div style="font-size: 0.8rem; opacity: 0.5;">No hay cambios significativos</div>';
+            <div class="gauge-label">Índice compuesto: (100 - Sat) + OEE×0.5</div>
+            <div class="gauge-delta ${deltaClass}">${deltaSign}${delta.toFixed(1)} pts vs ${comparisonData.nameA}</div>
+        `;
     }
 
-    // 4. Recommendation Logic
-    const criticalCenters = summaryB.filter(s => s.Saturacion > 0.85);
-    const recommendationContainer = document.getElementById('tile-changes'); // Reusing or updating
-    if (recommendationContainer && criticalCenters.length > 0) {
-        const div = document.createElement('div');
-        div.style.marginTop = '1rem';
-        div.style.padding = '10px';
-        div.style.background = 'rgba(227, 6, 19, 0.1)';
-        div.style.borderRadius = '8px';
-        div.style.borderLeft = '4px solid var(--rpk-red)';
-        div.innerHTML = `
-            <div style="font-size: 0.75rem; font-weight: 800; color: var(--rpk-red); margin-bottom: 4px;">RECOMENDACIÓN</div>
-            <div style="font-size: 0.8rem;">Se detectan ${criticalCenters.length} centros con saturación crítica (>85%). Considerar redistribución de carga.</div>
+    // ===== 3. RISK SCORE =====
+    const riskEl = document.getElementById('risk-score-container');
+    if (riskEl) {
+        const criticalCenters = summaryB.filter(s => s.Saturacion > 0.85).length;
+        const overloadedCenters = summaryB.filter(s => s.Saturacion > 1.0).length;
+        const riskScore = Math.min(100, Math.round(
+            (criticalCenters / Math.max(summaryB.length, 1)) * 40 +
+            (overloadedCenters / Math.max(summaryB.length, 1)) * 40 +
+            (avgSatB > 80 ? 20 : avgSatB > 60 ? 10 : 0)
+        ));
+        const riskColor = riskScore > 70 ? '#ff4d4d' : riskScore > 40 ? '#f5a623' : '#4cd137';
+        const riskLabel = riskScore > 70 ? 'ALTO' : riskScore > 40 ? 'MEDIO' : 'BAJO';
+
+        riskEl.innerHTML = `
+            <div class="risk-container">
+                <div class="risk-bar-bg">
+                    <div class="risk-bar-fill" style="width:${riskScore}%; background:${riskColor}"></div>
+                </div>
+                <div class="risk-value" style="color:${riskColor}">${riskScore}</div>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-top:4px;">
+                <span style="font-size:0.65rem; color:var(--text-muted)">Centros críticos: ${criticalCenters} | Sobrecarga: ${overloadedCenters}</span>
+                <span style="font-size:0.7rem; font-weight:800; color:${riskColor}">${riskLabel}</span>
+            </div>
         `;
-        recommendationContainer.appendChild(div);
+    }
+
+    // ===== 4. HEATMAP =====
+    const heatmapEl = document.getElementById('heatmap-grid');
+    if (heatmapEl) {
+        const labels = [...new Set([...summaryA.map(s => String(s.Centro)), ...summaryB.map(s => String(s.Centro))])].sort();
+        heatmapEl.innerHTML = labels.map(centro => {
+            const itemA = summaryA.find(s => String(s.Centro) === centro) || { Saturacion: 0 };
+            const itemB = summaryB.find(s => String(s.Centro) === centro) || { Saturacion: 0 };
+            const diff = ((itemB.Saturacion - itemA.Saturacion) * 100);
+            const absDiff = Math.abs(diff);
+            const intensity = Math.min(absDiff / 30, 1);
+            const bg = diff > 0.5
+                ? `rgba(255, 77, 77, ${0.1 + intensity * 0.4})`
+                : diff < -0.5
+                    ? `rgba(76, 209, 55, ${0.1 + intensity * 0.4})`
+                    : 'rgba(255,255,255,0.03)';
+            const barColor = diff > 0.5 ? '#ff4d4d' : diff < -0.5 ? '#4cd137' : '#555';
+            return `
+                <div class="heatmap-cell" style="background:${bg};" title="Centro ${centro}: ${diff > 0 ? '+' : ''}${diff.toFixed(1)}% saturación">
+                    <div class="cell-id">${centro}</div>
+                    <div class="cell-val">${diff > 0 ? '+' : ''}${diff.toFixed(1)}%</div>
+                    <div class="cell-bar" style="background:${barColor}"></div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    // ===== 5. WATERFALL CHART =====
+    const wfCtx = document.getElementById('waterfallChart');
+    if (wfCtx) {
+        if (waterfallChartInstance) waterfallChartInstance.destroy();
+        const labels = [...new Set([...summaryA.map(s => String(s.Centro)), ...summaryB.map(s => String(s.Centro))])].sort();
+        const deltas = labels.map(centro => {
+            const hA = detailA.filter(d => String(d.Centro) === centro).reduce((a, d) => a + (d['Horas_Totales'] || 0), 0);
+            const hB = detailB.filter(d => String(d.Centro) === centro).reduce((a, d) => a + (d['Horas_Totales'] || 0), 0);
+            return { centro, delta: hB - hA };
+        }).filter(d => Math.abs(d.delta) > 0.1).sort((a, b) => b.delta - a.delta);
+
+        waterfallChartInstance = new Chart(wfCtx.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: deltas.map(d => d.centro),
+                datasets: [{
+                    label: 'Δ Horas',
+                    data: deltas.map(d => d.delta.toFixed(1)),
+                    backgroundColor: deltas.map(d => d.delta > 0 ? 'rgba(255,77,77,0.7)' : 'rgba(76,209,55,0.7)'),
+                    borderColor: deltas.map(d => d.delta > 0 ? '#ff4d4d' : '#4cd137'),
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { grid: { color: '#2d2d35' }, ticks: { color: '#a0a0a0' } },
+                    x: { grid: { display: false }, ticks: { color: '#a0a0a0', font: { size: 10 } } }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => `${parseFloat(ctx.raw) > 0 ? '+' : ''}${ctx.raw}h`
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // ===== 6. DECISION SEMAPHORE =====
+    const semEl = document.getElementById('semaphore-list');
+    if (semEl) {
+        const deltaSat = avgSatB - avgSatA;
+        const deltaOEE = oeeB - oeeA;
+        const deltaFTE = fteB - fteA;
+        const deltaHours = totalHoursB - totalHoursA;
+        const critCount = summaryB.filter(s => s.Saturacion > 0.85).length;
+
+        const items = [
+            {
+                dot: deltaSat > 5 ? 'red' : deltaSat > 2 ? 'yellow' : 'green',
+                text: 'Saturación Media',
+                value: `${deltaSat > 0 ? '+' : ''}${deltaSat.toFixed(1)}%`,
+                valueColor: deltaSat > 5 ? '#ff4d4d' : deltaSat > 2 ? '#f5a623' : '#4cd137'
+            },
+            {
+                dot: deltaOEE < -2 ? 'red' : deltaOEE < 0 ? 'yellow' : 'green',
+                text: 'Eficiencia OEE',
+                value: `${deltaOEE > 0 ? '+' : ''}${deltaOEE.toFixed(1)}%`,
+                valueColor: deltaOEE < -2 ? '#ff4d4d' : deltaOEE < 0 ? '#f5a623' : '#4cd137'
+            },
+            {
+                dot: deltaFTE > 5 ? 'red' : deltaFTE > 1 ? 'yellow' : 'green',
+                text: 'Personal (FTE)',
+                value: `${deltaFTE > 0 ? '+' : ''}${deltaFTE.toFixed(1)} personas`,
+                valueColor: deltaFTE > 5 ? '#ff4d4d' : deltaFTE > 1 ? '#f5a623' : '#4cd137'
+            },
+            {
+                dot: deltaHours > 100 ? 'red' : deltaHours > 10 ? 'yellow' : 'green',
+                text: 'Carga Total',
+                value: `${deltaHours > 0 ? '+' : ''}${deltaHours.toFixed(0)}h`,
+                valueColor: deltaHours > 100 ? '#ff4d4d' : deltaHours > 10 ? '#f5a623' : '#4cd137'
+            },
+            {
+                dot: critCount > 3 ? 'red' : critCount > 0 ? 'yellow' : 'green',
+                text: 'Centros Críticos (>85%)',
+                value: `${critCount} centros`,
+                valueColor: critCount > 3 ? '#ff4d4d' : critCount > 0 ? '#f5a623' : '#4cd137'
+            }
+        ];
+
+        semEl.innerHTML = items.map(item => `
+            <div class="semaphore-item">
+                <div class="semaphore-dot ${item.dot}"></div>
+                <div class="semaphore-text">${item.text}</div>
+                <div class="semaphore-value" style="color:${item.valueColor}">${item.value}</div>
+            </div>
+        `).join('');
+    }
+
+    // ===== 7. SMART RECOMMENDATIONS =====
+    const recEl = document.getElementById('recommendation-container');
+    if (recEl) {
+        const recommendations = [];
+        const criticalCenters = summaryB.filter(s => s.Saturacion > 0.85).map(s => String(s.Centro));
+        const freeCenters = summaryB.filter(s => s.Saturacion < 0.5).map(s => String(s.Centro));
+
+        if (criticalCenters.length > 0 && freeCenters.length > 0) {
+            recommendations.push(`Redistribuir carga de centros saturados (${criticalCenters.slice(0, 2).join(', ')}) hacia centros con capacidad libre (${freeCenters.slice(0, 2).join(', ')}).`);
+        }
+        if (criticalCenters.length > 0 && freeCenters.length === 0) {
+            recommendations.push(`⚠️ ${criticalCenters.length} centros en estado crítico sin alternativa libre. Considerar turno adicional o subcontratación.`);
+        }
+        if (oeeB < oeeA && (oeeA - oeeB) > 2) {
+            recommendations.push(`El OEE ha caído ${(oeeA - oeeB).toFixed(1)}%. Revisar cambios en cadencias o condiciones de máquina antes de aplicar este escenario.`);
+        }
+        if ((fteB - fteA) > 3) {
+            recommendations.push(`Se necesitan +${(fteB - fteA).toFixed(0)} operarios (FTE). Solicitar provisión al dept. de RRHH con ${Math.ceil((fteB - fteA) * 1.1)} posiciones netas (10% rotación).`);
+        }
+        if (recommendations.length === 0) {
+            recommendations.push('El escenario es viable sin cambios estructurales. Proceder con la planificación estándar.');
+        }
+
+        recEl.innerHTML = `
+            <div class="recommendation-box">
+                <div class="rec-title">💡 Recomendación del Sistema</div>
+                <div class="rec-text">${recommendations.join('<br><br>')}</div>
+            </div>
+        `;
     }
 }
 
@@ -1104,12 +1265,16 @@ function exitComparisonMode() {
     isComparisonMode = false;
     document.getElementById('comparison-controls').style.display = 'none';
 
+    // Destroy KPI chart instances
+    if (radarChartInstance) { radarChartInstance.destroy(); radarChartInstance = null; }
+    if (waterfallChartInstance) { waterfallChartInstance.destroy(); waterfallChartInstance = null; }
+
     // Restore control bar
     const controlBar = document.querySelector('.control-bar');
     if (controlBar) controlBar.style.display = 'flex';
 
-    // Restore standard Grid
-    const dashboardGrid = document.querySelector('.bento-grid');
+    // Restore standard Grid (check both old and new class names)
+    const dashboardGrid = document.querySelector('.bento-pro') || document.querySelector('.bento-grid');
     if (dashboardGrid) {
         dashboardGrid.className = 'dashboard-grid';
         dashboardGrid.innerHTML = `

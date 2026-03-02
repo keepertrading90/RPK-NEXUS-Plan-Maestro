@@ -1188,3 +1188,384 @@ tr:hover {
     background: rgba(26, 26, 32, 0.4) !important;
     backdrop-filter: blur(8px);
 }
+
+/* =========================================
+   COMPARATIVA KPI AVANZADA — CSS
+   ========================================= */
+
+/* Bento Grid Pro Layout */
+.bento-pro {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: auto auto auto;
+    grid-template-areas:
+        "radar radar gauge"
+        "heatmap heatmap decisions"
+        "waterfall waterfall decisions";
+    gap: 12px;
+    padding: 12px;
+    animation: fadeInGrid 0.5s ease;
+}
+
+@keyframes fadeInGrid {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.bento-pro>div {
+    background: var(--dark-surface);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 16px;
+    animation: tileIn 0.4s ease both;
+}
+
+.bento-pro>div:nth-child(1) {
+    animation-delay: 0.05s;
+}
+
+.bento-pro>div:nth-child(2) {
+    animation-delay: 0.10s;
+}
+
+.bento-pro>div:nth-child(3) {
+    animation-delay: 0.15s;
+}
+
+.bento-pro>div:nth-child(4) {
+    animation-delay: 0.20s;
+}
+
+.bento-pro>div:nth-child(5) {
+    animation-delay: 0.25s;
+}
+
+@keyframes tileIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.tile-radar {
+    grid-area: radar;
+}
+
+.tile-gauge {
+    grid-area: gauge;
+}
+
+.tile-heatmap {
+    grid-area: heatmap;
+}
+
+.tile-waterfall {
+    grid-area: waterfall;
+}
+
+.tile-decisions {
+    grid-area: decisions;
+}
+
+/* KPI Tile Header */
+.kpi-header {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--rpk-red);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 10px;
+}
+
+/* Efficiency Gauge */
+.gauge-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 0;
+}
+
+.gauge-ring {
+    position: relative;
+    width: 140px;
+    height: 70px;
+    overflow: hidden;
+}
+
+.gauge-ring::before {
+    content: '';
+    position: absolute;
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    border: 12px solid var(--dark-surface-2);
+    border-bottom-color: transparent;
+    border-left-color: transparent;
+    transform: rotate(-90deg);
+}
+
+.gauge-fill {
+    position: absolute;
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    border: 12px solid transparent;
+    border-top-color: var(--rpk-red);
+    border-right-color: var(--rpk-red);
+    border-bottom-color: transparent;
+    border-left-color: transparent;
+    transform: rotate(-90deg);
+    transition: transform 1s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.gauge-value {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 1.8rem;
+    font-weight: 900;
+    color: #fff;
+}
+
+.gauge-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 8px;
+    text-align: center;
+}
+
+.gauge-delta {
+    font-size: 0.85rem;
+    font-weight: 800;
+    margin-top: 4px;
+    padding: 3px 10px;
+    border-radius: 6px;
+}
+
+.gauge-delta.positive {
+    color: #4cd137;
+    background: rgba(76, 209, 55, 0.1);
+}
+
+.gauge-delta.negative {
+    color: #ff4d4d;
+    background: rgba(255, 77, 77, 0.1);
+}
+
+.gauge-delta.neutral {
+    color: var(--text-muted);
+    background: rgba(160, 160, 160, 0.1);
+}
+
+/* Heatmap Grid */
+.heatmap-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 6px;
+}
+
+.heatmap-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 4px;
+    border-radius: 8px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    cursor: default;
+}
+
+.heatmap-cell:hover {
+    transform: scale(1.08);
+    box-shadow: 0 0 12px rgba(0, 0, 0, 0.5);
+    z-index: 2;
+}
+
+.heatmap-cell .cell-id {
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 2px;
+}
+
+.heatmap-cell .cell-val {
+    font-size: 0.9rem;
+    font-weight: 900;
+    color: #fff;
+}
+
+.heatmap-cell .cell-bar {
+    width: 100%;
+    height: 3px;
+    border-radius: 2px;
+    margin-top: 4px;
+    opacity: 0.7;
+}
+
+/* Risk Score */
+.risk-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.risk-bar-bg {
+    flex: 1;
+    height: 10px;
+    background: var(--dark-surface-2);
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.risk-bar-fill {
+    height: 100%;
+    border-radius: 5px;
+    transition: width 1s ease;
+}
+
+.risk-value {
+    font-size: 1.6rem;
+    font-weight: 900;
+    min-width: 50px;
+    text-align: right;
+}
+
+/* Decision Semaphore */
+.semaphore-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.semaphore-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border-color);
+    transition: background 0.2s ease;
+}
+
+.semaphore-item:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.semaphore-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    box-shadow: 0 0 8px currentColor;
+}
+
+.semaphore-dot.green {
+    background: #4cd137;
+    color: #4cd137;
+}
+
+.semaphore-dot.yellow {
+    background: #f5a623;
+    color: #f5a623;
+}
+
+.semaphore-dot.red {
+    background: #ff4d4d;
+    color: #ff4d4d;
+}
+
+.semaphore-text {
+    flex: 1;
+    font-size: 0.78rem;
+    color: var(--text-main);
+}
+
+.semaphore-value {
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+/* Smart Recommendation */
+.recommendation-box {
+    margin-top: 10px;
+    padding: 12px;
+    background: rgba(227, 6, 19, 0.06);
+    border-radius: 10px;
+    border-left: 4px solid var(--rpk-red);
+}
+
+.recommendation-box .rec-title {
+    font-size: 0.65rem;
+    font-weight: 800;
+    color: var(--rpk-red);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+}
+
+.recommendation-box .rec-text {
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--text-main);
+}
+
+/* Waterfall Chart Container */
+.waterfall-container {
+    height: 200px;
+    position: relative;
+}
+
+/* Radar Chart Container */
+.radar-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+}
+
+.radar-chart-wrap {
+    width: 280px;
+    height: 280px;
+}
+
+.radar-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.radar-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.78rem;
+}
+
+.radar-legend-item .leg-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.radar-legend-item .leg-val {
+    font-weight: 700;
+    margin-left: auto;
+    min-width: 50px;
+    text-align: right;
+}
