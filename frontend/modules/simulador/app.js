@@ -1828,3 +1828,82 @@ async function downloadComparePDF() {
         setLoading(false);
     }
 }
+
+async function downloadScenarioPDF() {
+    if (!currentData || !currentData.summary) return;
+    try {
+        setLoading(true);
+        const s = currentData.summary || [];
+        const d = currentData.detail || [];
+        const days = currentData.meta?.dias_laborales || 238;
+        const paramShifts = parseInt(document.getElementById('work-shifts').value) || 16;
+        const name = document.getElementById('current-scenario-name').textContent || currentScenarioId;
+
+        const avgSat = s.length ? (s.reduce((a, st) => a + (st.Saturacion || 0), 0) / s.length) * 100 : 0;
+        const oee = d.length ? (d.reduce((a, dtl) => a + (dtl['%OEE'] || 0), 0) / d.length) * 100 : 0;
+        const hours = d.reduce((a, dtl) => a + (dtl['Horas_Totales'] || 0), 0);
+        const hh = d.reduce((a, dtl) => a + (dtl.Horas_Hombre || 0), 0);
+        const fte = hh / (days * 8);
+
+        const kpis = [
+            { name: 'Saturación Media', value: avgSat, unit: '%' },
+            { name: 'OEE Global Medio', value: oee, unit: '%' },
+            { name: 'Carga Máquina Total', value: hours, unit: 'h' },
+            { name: 'Necesidad Personal (FTE)', value: fte, unit: '' }
+        ];
+
+        const centros = s.map(st => ({
+            centro: String(st.Centro),
+            saturacion: st.Saturacion * 100,
+            mod: st.Ratio_Personas_Maquina || 1
+        })).sort((a, b) => b.saturacion - a.saturacion).slice(0, 15);
+
+        const cambios_activos = localOverrides.map(ov => {
+            let details = [];
+            if (ov.demanda_override) details.push(`Demanda: ${ov.demanda_override}`);
+            if (ov.ppm_override) details.push(`PPM: ${ov.ppm_override}`);
+            if (ov.oee_override) details.push(`OEE: ${(ov.oee_override * 100).toFixed(1)}%`);
+            if (ov.setup_time_override) details.push(`Setup: ${ov.setup_time_override}h`);
+            if (ov.horas_turno_override) details.push(`Turnos: ${ov.horas_turno_override}h`);
+            if (ov.personnel_ratio_override) details.push(`MOD: ${ov.personnel_ratio_override}`);
+            return {
+                tipo: `Ctro ${ov.centro} - Art. ${ov.articulo}`,
+                detalle: details.join(" | ") || "Sobreescribir manual"
+            };
+        });
+
+        const payload = {
+            escenario_nombre: name,
+            kpis: kpis,
+            centros: centros,
+            cambios_activos: cambios_activos,
+            dias_laborales: days,
+            turnos: paramShifts
+        };
+
+        const res = await fetch(`${API_BASE}/reports/escenario-pdf`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) throw new Error('Error al generar PDF individual');
+
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const safeName = name.replace(/ /g, '_');
+        a.download = `Simulacion_Actual_${safeName}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        a.remove();
+
+    } catch (e) {
+        console.error(e);
+        alert('Error descargando el informe individual: ' + e.message);
+    } finally {
+        setLoading(false);
+    }
+}
