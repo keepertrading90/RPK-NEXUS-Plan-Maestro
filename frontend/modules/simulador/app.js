@@ -72,7 +72,7 @@ async function loadSimulation(scenarioId) {
         ? `${API_BASE}/simulate/base?dias_laborales=${days}&horas_turno=${shifts}&use_actual=${isModeActual}`
         : `${API_BASE}/simulate/${scenarioId}?dias_laborales=${days}&horas_turno=${shifts}&use_actual=${isModeActual}`;
 
-    document.getElementById('current-scenario-name').innerText = 'Cargando datos...';
+    document.getElementById('current-scenario-name').innerHTML = 'Cargando<br>datos...';
     setLoading(true);
 
     try {
@@ -82,9 +82,10 @@ async function loadSimulation(scenarioId) {
         if (scenarioId === 'base') baseData = currentData;
 
         currentScenarioId = scenarioId;
-        const baseName = isModeActual ? 'Escenario Actual (ERP)' : 'Escenario Base';
-        const sName = scenarioId === 'base' ? baseName : scenarios.find(s => s.id == scenarioId)?.name || 'Escenario';
-        document.getElementById('current-scenario-name').innerText = sName;
+        const baseName = isModeActual ? 'Escenario<br>Actual (ERP)' : 'Escenario<br>Base';
+        const scName = scenarios.find(s => s.id == scenarioId)?.name || 'Escenario';
+        const sName = scenarioId === 'base' ? baseName : `Escenario<br>${scName}`;
+        document.getElementById('current-scenario-name').innerHTML = sName;
 
         if (scenarioId !== 'base' && currentData.meta) {
             document.getElementById('work-days').value = currentData.meta.dias_laborales || 238;
@@ -109,7 +110,7 @@ async function loadSimulation(scenarioId) {
         updateUI();
     } catch (error) {
         console.error('Error loading simulation:', error);
-        document.getElementById('current-scenario-name').innerText = 'Error de conexión';
+        document.getElementById('current-scenario-name').innerHTML = 'Error de<br>conexión';
     } finally {
         setLoading(false);
     }
@@ -502,9 +503,12 @@ function populateWorkCenters() {
                     <span style="font-size: 0.65rem; color: var(--text-muted)">MOD:</span>
                     <input type="range" min="0.1" max="3.0" step="0.1" value="${config.personnel_ratio || 1.0}" 
                         style="width: 60px; height: 4px;" 
-                        oninput="this.nextElementSibling.innerText = parseFloat(this.value).toFixed(1)"
+                        oninput="this.nextElementSibling.value = parseFloat(this.value).toFixed(1)"
                         onchange="setCenterRatio('${c}', this.value, event)">
-                    <span style="font-size: 0.7rem; min-width: 20px;">${(config.personnel_ratio || 1.0).toFixed(1)}</span>
+                    <input type="number" min="0.1" max="3.0" step="0.1" value="${(config.personnel_ratio || 1.0).toFixed(1)}"
+                        style="width: 45px; background: var(--border-color); border: 1px solid #444; color: white; text-align: center; border-radius: 3px; font-size: 0.75rem; padding: 2px;"
+                        onchange="this.previousElementSibling.value = this.value; setCenterRatio('${c}', this.value, event)"
+                        onclick="event.stopPropagation()">
                 </div>
             </div>
         `;

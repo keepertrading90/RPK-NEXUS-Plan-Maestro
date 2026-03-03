@@ -643,25 +643,34 @@ body {
     opacity: 0.8;
 }
 
-.scenario-current-display {
+.control-actions.spacer {
     margin-left: auto;
-    font-size: 1.1rem;
-    font-weight: 800;
-    color: white;
+}
+
+.action-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.action-buttons .action-btn {
+    padding: 0.3rem 1rem;
+    font-size: 0.75rem;
+}
+
+.scenario-current-display {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
     padding-left: 1rem;
-    border-left: 1px solid var(--border-color);
+    border-left: 2px solid var(--rpk-red);
+    height: 100%;
 }
 
 #current-scenario-name {
     color: white;
-    /* Image shows white text for scenario name */
-}
-
-.scenario-current-display::before {
-    content: "|";
-    margin-right: 10px;
-    color: var(--rpk-red);
-    font-weight: 900;
+    font-size: 1.1rem;
+    font-weight: 800;
 }
 
 /* Dashboard Grid */
