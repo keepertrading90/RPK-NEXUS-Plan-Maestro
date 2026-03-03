@@ -1365,14 +1365,22 @@ body.compare-mode .main-layout {
 
 /* Row 3: Chart + Drill-down */
 .compare-body {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 10px;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 15px;
     min-height: 300px;
+    align-items: stretch;
 }
 
-.compare-body.has-drill {
-    grid-template-columns: 1fr 380px;
+.compare-body .chart-panel {
+    flex: 1;
+    min-width: 0;
+    /* needed for chart.js resize */
+}
+
+.compare-body .drilldown-panel {
+    width: 420px;
+    flex-shrink: 0;
 }
 
 .chart-panel {

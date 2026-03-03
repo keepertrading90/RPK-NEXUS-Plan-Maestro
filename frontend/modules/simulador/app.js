@@ -528,15 +528,11 @@ function toggleDropdown() {
 }
 
 // Close dropdown when clicking outside
-window.onclick = function (event) {
+window.addEventListener('click', function (event) {
     if (!event.target.matches('.dropdown-btn') && !event.target.matches('.dropdown-btn *') && !event.target.closest('.dropdown-content')) {
         closeDropdowns();
     }
-    // Also handle modal closing here
-    if (event.target.classList.contains('modal')) {
-        event.target.style.display = 'none';
-    }
-}
+});
 
 function closeDropdowns() {
     const dropdowns = document.getElementsByClassName("dropdown-content");
@@ -742,11 +738,12 @@ function setupEventListeners() {
         };
     });
 
-    window.onclick = (event) => {
+    // Se usa un document.addEventListener para no pisar el de dropdowns
+    document.addEventListener('click', (event) => {
         if (event.target.classList.contains('modal')) {
             event.target.style.display = 'none';
         }
-    };
+    });
 }
 
 async function performSaveScenario(name, overwriteId = null) {
@@ -926,26 +923,32 @@ function enterComparisonMode() {
             <!-- Row 1: KPI Cards -->
             <div class="kpi-row" id="kpi-row"></div>
 
-            <!-- Row 2: Filter Bar -->
+            <!-- Row 2: Impact Analysis -->
+            <div class="rec-bar" id="impact-bar" style="margin-bottom: 5px;"></div>
+
+            <!-- Row 3: Filter Bar -->
             <div class="compare-filter-bar" id="compare-filter-bar">
                 <div class="panel-title">Filtro de Centros:</div>
-                <select id="compare-center-select" multiple size="1" style="height:32px; background:#fff; color:#000; border-radius:4px; padding:0 5px; cursor:pointer;" onchange="onCompareFilterChange()">
-                    <!-- options -->
-                </select>
-                <button onclick="resetCompareFilter()" style="cursor:pointer;">Restablecer Top 15</button>
+                <div id="compare-center-dropdown" class="custom-dropdown">
+                    <div class="dropdown-btn" onclick="toggleCompareDropdown()">
+                        <span id="compare-dropdown-text">-- Filtrar Centros Específicos --</span>
+                        <span class="arrow">▼</span>
+                    </div>
+                    <div id="compare-center-options" class="dropdown-content">
+                        <!-- JS Generated Options -->
+                    </div>
+                </div>
+                <button onclick="resetCompareFilter()" style="cursor:pointer;" class="action-btn secondary">Restablecer Top 15</button>
             </div>
 
-            <!-- Row 3: Chart + Drill-down -->
+            <!-- Row 4: Chart + Drill-down -->
             <div class="compare-body" id="compare-body">
                 <div class="chart-panel">
                     <div class="panel-title" id="compare-chart-title">Saturación por Centro — Base vs Escenario</div>
-                    <div class="chart-wrap"><canvas id="compareChart"></canvas></div>
+                    <div class="chart-wrap" style="flex: 1; height: 100%;"><canvas id="compareChart"></canvas></div>
                 </div>
                 <!-- Drilldown se insertará si hay un centro seleccionado -->
             </div>
-
-            <!-- Row 4: Impact Analysis -->
-            <div class="rec-bar" id="impact-bar"></div>
         `;
     }
 
@@ -1015,28 +1018,55 @@ function renderKPICards() {
     }).join('');
 }
 
+function toggleCompareDropdown() {
+    document.getElementById("compare-center-options").classList.toggle("show");
+}
+
 function populateCompareFilters() {
     if (!comparisonData?.dataB) return;
     const sB = comparisonData.dataB.summary || [];
     const allCenters = sB.map(s => String(s.Centro)).sort();
 
-    const sel = document.getElementById('compare-center-select');
-    if (!sel) return;
-    sel.innerHTML = `<option value="" style="color:#000;">-- Filtrar Centros Específicos --</option>` +
-        allCenters.map(c => `<option value="${c}" style="color:#000;">${c}</option>`).join('');
+    const list = document.getElementById('compare-center-options');
+    if (!list) return;
+
+    list.innerHTML = '';
+    allCenters.forEach(c => {
+        const isChecked = comparisonSelectedCenters.includes(c);
+        const label = document.createElement('label');
+        label.className = 'dropdown-item';
+        label.innerHTML = `<input type="checkbox" value="${c}" ${isChecked ? 'checked' : ''}><span>${c}</span>`;
+        list.appendChild(label);
+    });
+
+    const checkboxes = list.querySelectorAll('input[type="checkbox"]');
+    checkboxes.forEach(cb => {
+        cb.addEventListener('change', onCompareFilterChange);
+    });
+
+    updateCompareDropdownText();
+}
+
+function updateCompareDropdownText() {
+    const textSpan = document.getElementById('compare-dropdown-text');
+    if (comparisonSelectedCenters.length === 0) {
+        textSpan.innerText = '-- Top 15 Centros --';
+    } else {
+        textSpan.innerText = `${comparisonSelectedCenters.length} centro(s) seleccionado(s)`;
+    }
 }
 
 function onCompareFilterChange() {
-    const sel = document.getElementById('compare-center-select');
-    const opts = Array.from(sel.selectedOptions).map(o => o.value).filter(v => v);
-    comparisonSelectedCenters = opts;
+    const list = document.getElementById('compare-center-options');
+    const checked = Array.from(list.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
+    comparisonSelectedCenters = checked;
+    updateCompareDropdownText();
     renderCompareChart();
 }
 
 function resetCompareFilter() {
     comparisonSelectedCenters = [];
-    const sel = document.getElementById('compare-center-select');
-    if (sel) sel.value = '';
+    populateCompareFilters(); // will re-render unchecked checkboxes and text
     renderCompareChart();
 }
 
