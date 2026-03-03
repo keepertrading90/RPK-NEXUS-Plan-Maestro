@@ -1319,20 +1319,28 @@ async function applyCompareCenterEdit(centro, value) {
 }
 
 async function applyCompareEdit(articulo, field, value) {
-    let override = localOverrides.find(o => o.Articulo === articulo);
+    // Find existing override or create one with correct lowercase keys
+    let override = localOverrides.find(o => String(o.articulo) === String(articulo));
     if (!override) {
-        override = { Articulo: articulo };
+        // Find the centro from dataB detail
+        const detailItem = comparisonData.dataB.detail.find(d => String(d.Articulo) === String(articulo));
+        const centro = detailItem?.Centro || '';
+        override = { articulo: String(articulo), centro: String(centro) };
         localOverrides.push(override);
     }
 
     let floatVal = parseFloat(value);
-    if (field === 'OEE') {
-        override['%OEE'] = floatVal / 100.0;
-    } else {
-        override[field] = floatVal;
+    // Map display field names to override field names
+    switch (field) {
+        case 'OEE': override.oee_override = floatVal / 100.0; break;
+        case 'PPM': override.ppm_override = floatVal; break;
+        case 'Demanda': override.demanda_override = floatVal; break;
+        case 'Setup': override.setup_time_override = floatVal; break;
+        case 'MOD': override.personnel_ratio_override = floatVal; break;
+        default: override[field] = floatVal;
     }
 
-    const centro = comparisonData.dataB.detail.find(d => String(d.Articulo) === String(articulo))?.Centro;
+    const centro = override.centro;
     await triggerCompareRecalculation();
     if (centro) openDrillDown(centro);
 }
