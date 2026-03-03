@@ -1534,7 +1534,7 @@ function renderImpactAnalysis() {
             <div class="rec-title">Cambios Identificados</div>
             <div class="rec-item">
                 <div class="rec-dot ${modifiedCenters.length > 0 ? 'yellow' : 'flat'}"></div>
-                <div>${modifiedCenters.length} centros con variaciones respecto al base.</div>
+                <div>${modifiedCenters.length} centros con variaciones respecto a ${comparisonData.nameA}.</div>
             </div>
             ${modifiedCenters.length > 0 ? `<div style="font-size:0.7rem; color:var(--text-muted); margin-left:12px;">${modifiedCenters.slice(0, 8).join(', ')}${modifiedCenters.length > 8 ? '...' : ''}</div>` : ''}
         </div>
@@ -1542,14 +1542,14 @@ function renderImpactAnalysis() {
             <div class="rec-title">Nivel de Criticidad (>85%)</div>
             <div class="rec-item">
                 <div class="rec-dot ${critB > critA ? 'red' : critB < critA ? 'green' : 'yellow'}"></div>
-                <div>${critB} centros críticos críticos. ${critB > critA ? `(+ ${critB - critA} vs Base)` : critB < critA ? `(- ${critA - critB} vs Base)` : ''}</div>
+                <div>${critB} centros críticos críticos. ${critB > critA ? `(+ ${critB - critA} vs ${comparisonData.nameA})` : critB < critA ? `(- ${critA - critB} vs ${comparisonData.nameA})` : ''}</div>
             </div>
         </div>
         <div class="rec-section" style="cursor:pointer" title="Ver impacto de personal en el gráfico">
             <div class="rec-title">Previsión de RRHH</div>
             <div class="rec-item">
                 <div class="rec-dot ${Math.abs(deltaFTE) > 5 ? 'red' : Math.abs(deltaFTE) < 1 ? 'green' : 'yellow'}"></div>
-                <div>Necesidad calculada: ${deltaFTE > 0 ? '+' : ''}${deltaFTE.toFixed(1)} FTE vs Base.</div>
+                <div>Necesidad calculada: ${deltaFTE > 0 ? '+' : ''}${deltaFTE.toFixed(1)} FTE vs ${comparisonData.nameA}.</div>
             </div>
         </div>
     `;
