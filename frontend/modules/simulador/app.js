@@ -1319,11 +1319,15 @@ function openDrillDown(centro) {
                     ${artsB.map(r => {
         const sat = (r.Saturacion * 100).toFixed(1);
         const satClass = sat > 85 ? 'pill-high' : (sat > 70 ? 'pill-mid' : 'pill-low');
+
+        const demanda = r.Demanda_Neta || r.Demanda || r['Volumen anual'] || 0;
+        const ppm = r.PPM || r['Piezas por minuto'] || 0;
+
         return `
                             <tr>
                                 <td><strong>${r.Articulo}</strong></td>
-                                <td class="text-right">${Math.round(r.Demanda_Neta || r.Demanda || 0).toLocaleString()}</td>
-                                <td class="text-right">${Math.round(r.PPM || 0)}</td>
+                                <td class="text-right">${Math.round(demanda).toLocaleString()}</td>
+                                <td class="text-right">${Math.round(ppm)}</td>
                                 <td class="text-right">${(r['%OEE'] * 100).toFixed(1)}%</td>
                                 <td class="text-center">
                                     <span class="saturation-pill ${satClass}">${sat}%</span>
@@ -1528,12 +1532,47 @@ function attemptExitComparison() {
 
 async function confirmExitComparison(action) {
     const meta = comparisonData.dataB.meta || {};
+    const existingOverrides = meta.applied_overrides || [];
+
+    // Merge existing scenario overrides with new session overrides
+    // Session overrides take precedence for the same articulo & centro
+    const mergedOverridesMap = new Map();
+
+    // 1. Add existing overrides
+    existingOverrides.forEach(ov => {
+        if (!ov.articulo) return;
+        const key = `${ov.articulo}_${ov.centro || ''}`;
+        mergedOverridesMap.set(key, { ...ov });
+    });
+
+    // 2. Apply session overrides (localOverrides) on top
+    localOverrides.forEach(ov => {
+        if (!ov.articulo) return;
+        // In comparison mode, 'centro' is the original center we are overriding
+        const key = `${ov.articulo}_${ov.centro || ''}`;
+        const existing = mergedOverridesMap.get(key) || {};
+        // Merge changed fields
+        const merged = { ...existing };
+        merged.articulo = ov.articulo;
+        merged.centro = ov.centro;
+        if (ov.oee_override !== null && ov.oee_override !== undefined) merged.oee_override = ov.oee_override;
+        if (ov.ppm_override !== null && ov.ppm_override !== undefined) merged.ppm_override = ov.ppm_override;
+        if (ov.demanda_override !== null && ov.demanda_override !== undefined) merged.demanda_override = ov.demanda_override;
+        if (ov.new_centro !== null && ov.new_centro !== undefined) merged.new_centro = ov.new_centro;
+        if (ov.horas_turno_override !== null && ov.horas_turno_override !== undefined) merged.horas_turno_override = ov.horas_turno_override;
+        if (ov.personnel_ratio_override !== null && ov.personnel_ratio_override !== undefined) merged.personnel_ratio_override = ov.personnel_ratio_override;
+        if (ov.setup_time_override !== null && ov.setup_time_override !== undefined) merged.setup_time_override = ov.setup_time_override;
+        mergedOverridesMap.set(key, merged);
+    });
+
+    const finalOverridesList = Array.from(mergedOverridesMap.values());
+
     const buildPayload = (name) => ({
         name,
         dias_laborales: meta.dias_laborales || parseInt(document.getElementById('work-days').value) || 238,
         horas_turno_global: meta.horas_turno_global || parseInt(document.getElementById('work-shifts').value) || 16,
         center_configs: centerConfigs,
-        overrides: cleanOverridesForSave(localOverrides)
+        overrides: cleanOverridesForSave(finalOverridesList)
     });
 
     if (action === 'overwrite') {
