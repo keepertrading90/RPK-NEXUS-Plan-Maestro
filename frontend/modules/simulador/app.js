@@ -365,9 +365,16 @@ function renderLocalOverrides() {
 
                     ${ov.setup_time_override !== undefined && ov.setup_time_override !== null ? (() => {
                 const orig = (origSetup || 0).toFixed(1);
-                const newVal = (ov.setup_time_override).toFixed(1);
-                const changed = Math.abs(orig - newVal) > 0.1;
+                const newVal = (Number(ov.setup_time_override)).toFixed(1);
+                const changed = Math.abs(origSetup - ov.setup_time_override) >= 0.1;
                 return `<div>Setup: ${changed ? `<span class="val-original">${orig}h</span><b class="val-changed">➜ ${newVal}h</b>` : `<span>${orig}h</span>`}</div>`;
+            })() : ''}
+
+                    ${ov.personnel_ratio_override !== undefined && ov.personnel_ratio_override !== null ? (() => {
+                const orig = (origMod || 1.0).toFixed(1);
+                const newVal = (Number(ov.personnel_ratio_override)).toFixed(1);
+                const changed = origMod !== ov.personnel_ratio_override;
+                return `<div>MOD: ${changed ? `<span class="val-original">${orig}</span><b class="val-changed">➜ ${newVal}</b>` : `<span>${orig}</span>`}</div>`;
             })() : ''}
                 </div>
             </div>
@@ -430,11 +437,25 @@ async function loadScenarioHistory(id) {
                             detailItemsHtml += `<div>Dem: ${changed ? `<span class="val-original">${orig.toLocaleString()}</span><b class="val-changed">➜ ${newVal.toLocaleString()}</b>` : `<span>${orig.toLocaleString()}</span>`}</div>`;
                         }
 
-                        if (ov.horas_turno_override) {
+                        if (ov.horas_turno_override != null) {
                             const orig = baseItem ? baseItem['horas_turno'] : '?';
                             const newVal = ov.horas_turno_override;
                             const changed = orig != newVal;
                             detailItemsHtml += `<div>Turnos: ${changed ? `<span class="val-original">${orig}h</span><b class="val-changed">➜ ${newVal}h</b>` : `<span>${orig}h</span>`}</div>`;
+                        }
+
+                        if (ov.setup_time_override != null) {
+                            const orig = baseItem ? Number(baseItem['Setup (h)'] || 0).toFixed(1) : '?';
+                            const newVal = Number(ov.setup_time_override).toFixed(1);
+                            const changed = orig !== newVal;
+                            detailItemsHtml += `<div>Setup: ${changed ? `<span class="val-original">${orig}h</span><b class="val-changed">➜ ${newVal}h</b>` : `<span>${orig}h</span>`}</div>`;
+                        }
+
+                        if (ov.personnel_ratio_override != null) {
+                            const orig = baseItem ? Number(baseItem['Ratio_MOD'] || 1.0).toFixed(1) : '?';
+                            const newVal = Number(ov.personnel_ratio_override).toFixed(1);
+                            const changed = orig !== newVal;
+                            detailItemsHtml += `<div>MOD: ${changed ? `<span class="val-original">${orig}</span><b class="val-changed">➜ ${newVal}</b>` : `<span>${orig}</span>`}</div>`;
                         }
 
                         changesSummary += `
