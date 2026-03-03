@@ -676,7 +676,15 @@ function setupEventListeners() {
             else localOverrides.push(override);
 
             document.getElementById('edit-modal').style.display = 'none';
-            await updatePreviewSimulation();
+
+            if (isComparisonMode) {
+                // Si estamos en comparativa, recalculamos el escenario B
+                await triggerCompareRecalculation();
+                // Re-abrimos el drilldown para ver el cambio reflejado en la tabla
+                openDrillDown(centroBase);
+            } else {
+                await updatePreviewSimulation();
+            }
         };
     }
 
@@ -810,18 +818,21 @@ async function updatePreviewSimulation() {
 }
 
 function openEditModal(articulo, centro) {
-    const d = currentData.detail.find(item => item.Articulo == articulo && item.Centro == centro);
+    const dataSource = (isComparisonMode && comparisonData?.dataB) ? comparisonData.dataB : currentData;
+    const d = dataSource?.detail?.find(item => item.Articulo == articulo && item.Centro == centro);
     if (!d) return;
+
     document.getElementById('edit-articulo').value = articulo;
     document.getElementById('edit-centro').value = centro;
     document.getElementById('display-articulo').innerText = articulo;
     document.getElementById('edit-oee').value = (d['%OEE'] * 100).toFixed(2);
-    document.getElementById('edit-ppm').value = Math.round(d['Piezas por minuto']);
-    document.getElementById('edit-demanda').value = Math.round(d['Volumen anual']);
+    document.getElementById('edit-ppm').value = Math.round(d['Piezas por minuto'] || d['PPM'] || 0);
+    document.getElementById('edit-demanda').value = Math.round(d['Volumen anual'] || d['Demanda'] || 0);
+
     const existingOverride = localOverrides.find(o => o.articulo == articulo && o.centro == centro);
     document.getElementById('edit-shifts').value = (existingOverride && existingOverride.horas_turno_override) ? existingOverride.horas_turno_override : "";
-    document.getElementById('edit-setup').value = (existingOverride && existingOverride.setup_time_override !== undefined) ? existingOverride.setup_time_override : (d['Setup (h)'] || 0);
-    document.getElementById('edit-mod').value = (existingOverride && existingOverride.personnel_ratio_override) ? existingOverride.personnel_ratio_override : (d.Ratio_MOD || 1.0);
+    document.getElementById('edit-setup').value = (existingOverride && existingOverride.setup_time_override !== undefined) ? existingOverride.setup_time_override : (d['Setup (h)'] || d['Setup'] || 0);
+    document.getElementById('edit-mod').value = (existingOverride && existingOverride.personnel_ratio_override) ? existingOverride.personnel_ratio_override : (d.Ratio_MOD || d.Ratio_Personas_Maquina || 1.0);
 
     const centers = [...new Set(currentData.detail.map(item => item.Centro))].sort();
     document.getElementById('edit-new-centro').innerHTML = centers.map(c => `<option value="${c}" ${c == centro ? 'selected' : ''}>${c}</option>`).join('');
@@ -923,31 +934,29 @@ function enterComparisonMode() {
             <!-- Row 1: KPI Cards -->
             <div class="kpi-row" id="kpi-row"></div>
 
-            <!-- Row 2: Impact Analysis -->
-            <div class="rec-bar" id="impact-bar" style="margin-bottom: 5px;"></div>
-
-            <!-- Row 3: Filter Bar -->
+            <!-- Row 2: Filter Bar -->
             <div class="compare-filter-bar" id="compare-filter-bar">
-                <div class="panel-title">Filtro de Centros:</div>
+                <div class="panel-title" style="margin-right:1rem">Filtros:</div>
                 <div id="compare-center-dropdown" class="custom-dropdown">
                     <div class="dropdown-btn" onclick="toggleCompareDropdown()">
-                        <span id="compare-dropdown-text">-- Filtrar Centros Específicos --</span>
+                        <span id="compare-dropdown-text">-- Top 15 Centros --</span>
                         <span class="arrow">▼</span>
                     </div>
-                    <div id="compare-center-options" class="dropdown-content">
-                        <!-- JS Generated Options -->
-                    </div>
+                    <div id="compare-center-options" class="dropdown-content"></div>
                 </div>
-                <button onclick="resetCompareFilter()" style="cursor:pointer;" class="action-btn secondary">Restablecer Top 15</button>
+                <button onclick="resetCompareFilter()" class="action-btn secondary" style="margin-left:10px">Restablecer Ranking</button>
             </div>
 
-            <!-- Row 4: Chart + Drill-down -->
+            <!-- Row 3: Impact Analysis -->
+            <div class="rec-bar" id="impact-bar" style="margin-bottom: 5px;"></div>
+
+            <!-- Row 4: Chart + Drill-down container -->
             <div class="compare-body" id="compare-body">
-                <div class="chart-panel">
-                    <div class="panel-title" id="compare-chart-title">Saturación por Centro — Base vs Escenario</div>
-                    <div class="chart-wrap" style="flex: 1; height: 100%;"><canvas id="compareChart"></canvas></div>
+                <div class="chart-panel dash-card" style="height: 400px; padding: 1.5rem;">
+                    <div class="panel-title" id="compare-chart-title" style="margin-bottom:1rem">Cargando gráfica...</div>
+                    <div class="chart-wrap" style="flex: 1; height:100%"><canvas id="compareChart"></canvas></div>
                 </div>
-                <!-- Drilldown se insertará si hay un centro seleccionado -->
+                <!-- Drill-down se insertará debajo via JS -->
             </div>
         `;
     }
@@ -1136,11 +1145,19 @@ function renderCompareChart() {
                     label: comparisonData.nameB,
                     data: valsB,
                     backgroundColor: valsB.map(v => {
-                        if (comparisonViewMetric === 'Saturacion' && v > 85) return 'rgba(255,77,77,0.7)';
+                        if (comparisonViewMetric === 'Saturacion') {
+                            if (v > 85) return '#ff4d4d'; // Rojo
+                            if (v > 70) return '#f5a623'; // Amarillo
+                            return '#4cd137'; // Verde
+                        }
                         return 'rgba(227,6,19,0.85)';
                     }),
                     borderColor: valsB.map(v => {
-                        if (comparisonViewMetric === 'Saturacion' && v > 85) return '#ff4d4d';
+                        if (comparisonViewMetric === 'Saturacion') {
+                            if (v > 85) return '#d00000';
+                            if (v > 70) return '#e67e22';
+                            return '#44bd32';
+                        }
                         return 'var(--rpk-red)';
                     }),
                     borderWidth: 1,
@@ -1151,16 +1168,13 @@ function renderCompareChart() {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            onClick: (e, elements, chart) => {
-                let idx = -1;
+            plugins: {
+                legend: { display: true, position: 'top', labels: { color: '#a0a0a0', boxWidth: 12 } }
+            },
+            onClick: (e, items) => {
+                const elements = compareChartInstance.getElementsAtEventForMode(e, 'index', { intersect: false }, true);
                 if (elements.length > 0) {
-                    idx = elements[0].index;
-                } else {
-                    const points = chart.getElementsAtEventForMode(e, 'index', { intersect: false }, true);
-                    if (points.length > 0) idx = points[0].index;
-                }
-
-                if (idx !== -1) {
+                    const idx = elements[0].index;
                     openDrillDown(labels[idx]);
                 }
             },
@@ -1178,31 +1192,17 @@ function renderCompareChart() {
                     grid: { display: false },
                     ticks: { color: '#a0a0a0', font: { size: 11, weight: '600' } }
                 }
-            },
-            plugins: {
-                legend: { display: true, position: 'top', labels: { color: '#a0a0a0', boxWidth: 12 } }
             }
         }
     });
-
-    // Cierra el drill down si estaba abierto pero la barra no clica
-    const body = document.getElementById('compare-body');
-    if (body) {
-        body.classList.remove('has-drill');
-        const existingDrill = document.querySelector('.drilldown-panel');
-        if (existingDrill) existingDrill.remove();
-    }
 }
 
 function openDrillDown(centro) {
     const dB = comparisonData.dataB.detail || [];
     const artsB = dB.filter(d => String(d.Centro) === String(centro));
 
-    // Preparar el HTML del drilldown
     const body = document.getElementById('compare-body');
     if (!body) return;
-
-    body.classList.add('has-drill');
 
     // Eliminar el actual si existe
     const existing = document.querySelector('.drilldown-panel');
@@ -1211,56 +1211,70 @@ function openDrillDown(centro) {
     const turnosVal = centerConfigs[centro] || 'auto';
 
     const panel = document.createElement('div');
-    panel.className = 'drilldown-panel';
+    panel.className = 'drilldown-panel dash-card table-card';
     panel.innerHTML = `
-        <div class="drill-header">
-            <div class="drill-title">Centro ${centro}</div>
-            <button class="drill-back" onclick="renderCompareChart()">✕ Cerrar</button>
+        <div class="card-header" style="padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <h3 style="margin:0; font-size:1.1rem; color:#fff">Detalle Centro: <span style="color:var(--rpk-red)">${centro}</span></h3>
+                <div style="display:flex; align-items:center; gap:8px; margin-left:1.5rem; background:rgba(255,255,255,0.03); padding:4px 10px; border-radius:8px; border:1px solid var(--border-color);">
+                    <label style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px">Turnos Centro:</label>
+                    <select class="dark-input" style="padding: 2px 6px; font-size:0.8rem; min-width:120px; border:none; background:transparent;" onchange="applyCompareCenterEdit('${centro}', this.value)">
+                        <option value="auto" ${turnosVal === 'auto' ? 'selected' : ''}>(Auto)</option>
+                        <option value="8" ${turnosVal === 8 ? 'selected' : ''}>1 (8h)</option>
+                        <option value="16" ${turnosVal === 16 ? 'selected' : ''}>2 (16h)</option>
+                        <option value="24" ${turnosVal === 24 ? 'selected' : ''}>3 (24h)</option>
+                    </select>
+                </div>
+            </div>
+            <button class="action-btn small secondary" onclick="closeDrillDown()">✕ Cerrar Detalle</button>
         </div>
-        <div style="margin-bottom: 15px; display:flex; gap:10px; align-items:center;">
-            <label style="font-size:0.65rem; color:var(--text-muted); text-transform:uppercase;">Turnos:</label>
-            <select class="dark-input" style="padding: 3px 6px; font-size:0.75rem; min-width:80px;" onchange="applyCompareCenterEdit('${centro}', this.value)">
-                <option value="auto" ${turnosVal === 'auto' ? 'selected' : ''}>Auto</option>
-                <option value="8" ${turnosVal === 8 ? 'selected' : ''}>1 (8h)</option>
-                <option value="16" ${turnosVal === 16 ? 'selected' : ''}>2 (16h)</option>
-                <option value="24" ${turnosVal === 24 ? 'selected' : ''}>3 (24h)</option>
-            </select>
-        </div>
-        <table class="drill-table">
-            <thead>
-                <tr>
-                    <th>Art.</th>
-                    <th title="S={Setup} / T={Traslado}">Conf</th>
-                    <th title="Demanda Neta Anual">DMD</th>
-                    <th title="OEE (%)">OEE</th>
-                    <th title="Ratio Persona/Máquina">MOD</th>
-                    <th title="Piezas Por Minuto">PPM</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${artsB.map(r => `
+        <div class="table-container">
+            <table>
+                <thead>
                     <tr>
-                        <td style="font-weight:600">${r.Articulo}</td>
-                        <td style="display:flex;flex-direction:column;gap:3px">
-                            <input title="Setup (Hrs)" type="number" class="dark-input table-small-input" style="width:45px;" value="${(r.Setup || 0)}" onblur="applyCompareEdit('${r.Articulo}','Setup', this.value)">
-                            <select title="Traslado" class="dark-input table-small-input" style="width:45px;" onchange="applyCompareEdit('${r.Articulo}','Requiere_Traslado', this.value)">
-                                <option value="1" ${r.Requiere_Traslado ? 'selected' : ''}>Si</option>
-                                <option value="0" ${!r.Requiere_Traslado ? 'selected' : ''}>No</option>
-                            </select>
-                        </td>
-                        <td><input type="number" class="dark-input table-small-input" style="width:65px;" value="${Math.round(r.Demanda_Neta || r.Demanda || 0)}" onblur="applyCompareEdit('${r.Articulo}', 'Demanda', this.value)"></td>
-                        <td><input type="number" class="dark-input table-small-input" style="width:50px;" value="${(r['%OEE'] * 100).toFixed(1)}" onblur="applyCompareEdit('${r.Articulo}', 'OEE', this.value)"></td>
-                        <td><input type="number" class="dark-input table-small-input" style="width:40px;" value="${(r.Ratio_Personas_Maquina || 1.0)}" onblur="applyCompareEdit('${r.Articulo}', 'Ratio_Personas_Maquina', this.value)"></td>
-                        <td><input type="number" class="dark-input table-small-input" style="width:50px;" value="${r.PPM || 0}" onblur="applyCompareEdit('${r.Articulo}', 'PPM', this.value)"></td>
+                        <th>Articulo</th>
+                        <th class="text-right">Demanda</th>
+                        <th class="text-right">PPM</th>
+                        <th class="text-right">OEE (%)</th>
+                        <th class="text-center">Saturación</th>
+                        <th class="text-right">Ratio MOD</th>
+                        <th class="text-center">Acciones</th>
                     </tr>
-                `).join('')}
-            </tbody>
-        </table>
-        <div style="font-size: 0.65rem; color: var(--rpk-red); margin-top: 10px;">★ Los cambios recalculan el Escenario B en vivo.</div>
+                </thead>
+                <tbody>
+                    ${artsB.map(r => {
+        const sat = (r.Saturacion * 100).toFixed(1);
+        const satClass = sat > 85 ? 'pill-high' : (sat > 70 ? 'pill-mid' : 'pill-low');
+        return `
+                            <tr>
+                                <td><strong>${r.Articulo}</strong></td>
+                                <td class="text-right">${Math.round(r.Demanda_Neta || r.Demanda || 0).toLocaleString()}</td>
+                                <td class="text-right">${Math.round(r.PPM || 0)}</td>
+                                <td class="text-right">${(r['%OEE'] * 100).toFixed(1)}%</td>
+                                <td class="text-center">
+                                    <span class="saturation-pill ${satClass}">${sat}%</span>
+                                </td>
+                                <td class="text-right">${(r.Ratio_Personas_Maquina || 1.0).toFixed(1)}</td>
+                                <td class="text-center">
+                                    <button class="secondary-btn" 
+                                        style="padding: 0.3rem 0.6rem; font-size: 0.7rem;"
+                                        onclick="openEditModal('${r.Articulo}', '${centro}')">Ajustar</button>
+                                </td>
+                            </tr>
+                        `;
+    }).join('')}
+                </tbody>
+            </table>
+        </div>
     `;
-
     body.appendChild(panel);
     compareChartInstance.resize();
+}
+
+function closeDrillDown() {
+    const existing = document.querySelector('.drilldown-panel');
+    if (existing) existing.remove();
+    if (compareChartInstance) compareChartInstance.resize();
 }
 
 async function applyCompareCenterEdit(centro, value) {

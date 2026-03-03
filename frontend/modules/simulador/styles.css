@@ -1364,23 +1364,20 @@ body.compare-mode .main-layout {
 }
 
 /* Row 3: Chart + Drill-down */
+/* Row 3: Chart + Drill-down */
 .compare-body {
     display: flex;
-    flex-wrap: nowrap;
+    flex-direction: column;
     gap: 15px;
-    min-height: 300px;
-    align-items: flex-start;
+    align-items: stretch;
 }
 
 .compare-body .chart-panel {
-    flex: 1;
-    min-width: 0;
-    /* needed for chart.js resize */
+    width: 100%;
 }
 
 .compare-body .drilldown-panel {
-    width: 420px;
-    flex-shrink: 0;
+    width: 100%;
 }
 
 .chart-panel {
@@ -1398,12 +1395,13 @@ body.compare-mode .main-layout {
 /* Drill-down */
 .drilldown-panel {
     background: var(--dark-surface);
-    border: 1px solid rgba(227, 6, 19, 0.2);
+    border: 1px solid var(--border-color);
     border-radius: 12px;
-    padding: 14px;
+    padding: 0;
+    /* Table will handle padding */
     animation: drillSlide 0.25s ease;
-    overflow-y: auto;
-    max-height: 500px;
+    overflow: hidden;
+    margin-top: 10px;
 }
 
 @keyframes drillSlide {
