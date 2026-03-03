@@ -1190,29 +1190,34 @@ tr:hover {
 }
 
 /* =========================================
-   COMPARATIVA V2 — INTERACTIVA & LEGIBLE
+   COMPARATIVA V3 — PRODUCCIÓN FINAL
    ========================================= */
 
-/* Layout Principal */
+/* Full-width mode: hide right panel */
+body.compare-mode .right-panel {
+    display: none !important;
+}
+
+body.compare-mode .main-layout {
+    grid-template-columns: var(--sidebar-width) 1fr;
+}
+
+/* Layout */
 .compare-layout {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    padding: 12px;
-    animation: compFadeIn 0.4s ease;
-    overflow-y: auto;
-    max-height: calc(100vh - var(--header-height) - 60px);
+    gap: 10px;
+    padding: 10px;
+    animation: compIn 0.35s ease;
 }
 
-@keyframes compFadeIn {
+@keyframes compIn {
     from {
         opacity: 0;
-        transform: translateY(8px);
     }
 
     to {
         opacity: 1;
-        transform: translateY(0);
     }
 }
 
@@ -1226,15 +1231,14 @@ tr:hover {
 .kpi-card {
     background: var(--dark-surface);
     border: 1px solid var(--border-color);
-    border-radius: 14px;
-    padding: 18px 20px;
+    border-radius: 12px;
+    padding: 16px 18px;
     cursor: pointer;
-    transition: all 0.25s ease;
+    transition: all 0.2s ease;
     position: relative;
-    overflow: hidden;
 }
 
-.kpi-card::before {
+.kpi-card::after {
     content: '';
     position: absolute;
     top: 0;
@@ -1243,39 +1247,38 @@ tr:hover {
     height: 3px;
     background: var(--rpk-red);
     opacity: 0;
-    transition: opacity 0.25s ease;
+    border-radius: 12px 12px 0 0;
+    transition: opacity 0.2s;
 }
 
 .kpi-card:hover {
     border-color: rgba(227, 6, 19, 0.3);
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    transform: translateY(-1px);
 }
 
-.kpi-card:hover::before {
-    opacity: 1;
+.kpi-card:hover::after {
+    opacity: 0.5;
 }
 
 .kpi-card.active {
     border-color: var(--rpk-red);
-    box-shadow: 0 0 20px rgba(227, 6, 19, 0.15);
 }
 
-.kpi-card.active::before {
+.kpi-card.active::after {
     opacity: 1;
 }
 
 .kpi-card .kpi-label {
-    font-size: 0.65rem;
+    font-size: 0.6rem;
     font-weight: 700;
     color: var(--rpk-red);
     text-transform: uppercase;
-    letter-spacing: 1.5px;
-    margin-bottom: 6px;
+    letter-spacing: 1.2px;
+    margin-bottom: 4px;
 }
 
 .kpi-card .kpi-value {
-    font-size: 2.2rem;
+    font-size: 2rem;
     font-weight: 900;
     color: #fff;
     line-height: 1.1;
@@ -1284,12 +1287,12 @@ tr:hover {
 .kpi-card .kpi-delta {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    font-size: 0.85rem;
+    gap: 3px;
+    font-size: 0.8rem;
     font-weight: 800;
-    margin-top: 6px;
-    padding: 2px 8px;
-    border-radius: 6px;
+    margin-top: 4px;
+    padding: 2px 7px;
+    border-radius: 5px;
 }
 
 .kpi-delta.up {
@@ -1304,61 +1307,101 @@ tr:hover {
 
 .kpi-delta.flat {
     color: var(--text-muted);
-    background: rgba(160, 160, 160, 0.1);
+    background: rgba(160, 160, 160, 0.08);
 }
 
 .kpi-card .kpi-sub {
-    font-size: 0.7rem;
+    font-size: 0.65rem;
     color: var(--text-muted);
-    margin-top: 4px;
+    margin-top: 3px;
 }
 
-/* Row 2: Chart + Drilldown */
+/* Row 2: Filter Bar */
+.compare-filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: var(--dark-surface);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+}
+
+.compare-filter-bar .panel-title {
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: var(--rpk-red);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    white-space: nowrap;
+}
+
+.compare-filter-bar select {
+    background: var(--dark-surface-2);
+    color: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 5px 8px;
+    font-size: 0.75rem;
+    flex: 1;
+    max-width: 300px;
+}
+
+.compare-filter-bar button {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-size: 0.7rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.compare-filter-bar button:hover {
+    color: #fff;
+    border-color: var(--rpk-red);
+}
+
+/* Row 3: Chart + Drill-down */
 .compare-body {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
     gap: 10px;
-    min-height: 320px;
+    min-height: 300px;
 }
 
-.compare-body.no-drill {
-    grid-template-columns: 1fr;
+.compare-body.has-drill {
+    grid-template-columns: 1fr 380px;
 }
 
 .chart-panel {
     background: var(--dark-surface);
     border: 1px solid var(--border-color);
-    border-radius: 14px;
-    padding: 16px;
-}
-
-.chart-panel .panel-title {
-    font-size: 0.7rem;
-    font-weight: 700;
-    color: var(--rpk-red);
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    margin-bottom: 12px;
+    border-radius: 12px;
+    padding: 14px;
 }
 
 .chart-panel .chart-wrap {
-    height: 280px;
+    height: 300px;
     position: relative;
 }
 
-/* Drilldown Panel */
+/* Drill-down */
 .drilldown-panel {
     background: var(--dark-surface);
     border: 1px solid rgba(227, 6, 19, 0.2);
-    border-radius: 14px;
-    padding: 16px;
-    animation: drillIn 0.3s ease;
+    border-radius: 12px;
+    padding: 14px;
+    animation: drillSlide 0.25s ease;
+    overflow-y: auto;
+    max-height: 500px;
 }
 
-@keyframes drillIn {
+@keyframes drillSlide {
     from {
         opacity: 0;
-        transform: translateX(20px);
+        transform: translateX(15px);
     }
 
     to {
@@ -1367,31 +1410,31 @@ tr:hover {
     }
 }
 
-.drilldown-panel .drill-header {
+.drill-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 12px;
+    margin-bottom: 10px;
 }
 
-.drilldown-panel .drill-title {
+.drill-title {
     font-size: 0.85rem;
     font-weight: 800;
     color: #fff;
 }
 
-.drilldown-panel .drill-back {
-    font-size: 0.75rem;
+.drill-back {
+    font-size: 0.7rem;
     color: var(--text-muted);
     cursor: pointer;
-    transition: color 0.2s;
     background: none;
     border: 1px solid var(--border-color);
-    padding: 4px 10px;
-    border-radius: 6px;
+    padding: 3px 8px;
+    border-radius: 5px;
+    transition: all 0.2s;
 }
 
-.drilldown-panel .drill-back:hover {
+.drill-back:hover {
     color: #fff;
     border-color: var(--rpk-red);
 }
@@ -1399,51 +1442,51 @@ tr:hover {
 .drill-kpis {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-    margin-bottom: 12px;
+    gap: 6px;
+    margin-bottom: 10px;
 }
 
 .drill-kpi {
     background: rgba(255, 255, 255, 0.02);
     border: 1px solid var(--border-color);
-    border-radius: 8px;
-    padding: 10px;
+    border-radius: 6px;
+    padding: 8px;
     text-align: center;
 }
 
 .drill-kpi .dk-val {
-    font-size: 1.3rem;
+    font-size: 1.1rem;
     font-weight: 900;
     color: #fff;
 }
 
 .drill-kpi .dk-label {
-    font-size: 0.6rem;
+    font-size: 0.55rem;
     color: var(--text-muted);
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 0.8px;
     margin-top: 2px;
 }
 
 .drill-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.78rem;
+    font-size: 0.75rem;
 }
 
 .drill-table th {
     text-align: left;
-    font-size: 0.6rem;
+    font-size: 0.55rem;
     font-weight: 700;
     color: var(--text-muted);
     text-transform: uppercase;
-    letter-spacing: 1px;
-    padding: 6px 8px;
+    letter-spacing: 0.8px;
+    padding: 5px 6px;
     border-bottom: 1px solid var(--border-color);
 }
 
 .drill-table td {
-    padding: 7px 8px;
+    padding: 5px 6px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.03);
     color: var(--text-main);
 }
@@ -1452,114 +1495,66 @@ tr:hover {
     background: rgba(255, 255, 255, 0.02);
 }
 
-.sat-pill {
-    display: inline-block;
-    padding: 2px 8px;
+.drill-table .edit-btn {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
+    padding: 2px 6px;
     border-radius: 4px;
-    font-weight: 700;
-    font-size: 0.75rem;
+    font-size: 0.65rem;
+    cursor: pointer;
+    transition: all 0.2s;
 }
 
-.sat-pill.critical {
-    background: rgba(255, 77, 77, 0.15);
-    color: #ff4d4d;
+.drill-table .edit-btn:hover {
+    color: var(--rpk-red);
+    border-color: var(--rpk-red);
 }
 
-.sat-pill.warning {
-    background: rgba(245, 166, 35, 0.15);
-    color: #f5a623;
-}
-
-.sat-pill.ok {
-    background: rgba(76, 209, 55, 0.15);
-    color: #4cd137;
-}
-
-/* Row 3: Impact Analysis */
-.impact-bar {
+/* Row 4: Recommendations */
+.rec-bar {
     background: var(--dark-surface);
     border: 1px solid var(--border-color);
-    border-radius: 14px;
-    padding: 16px 20px;
+    border-radius: 12px;
+    padding: 14px 18px;
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
 }
 
-.impact-bar .panel-title {
-    font-size: 0.7rem;
-    font-weight: 700;
-    color: var(--rpk-red);
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    margin-bottom: 10px;
-}
-
-.impact-signals {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.signal-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 0.8rem;
-}
-
-.signal-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    flex-shrink: 0;
-    box-shadow: 0 0 6px currentColor;
-}
-
-.signal-dot.red {
-    background: #ff4d4d;
-    color: #ff4d4d;
-}
-
-.signal-dot.yellow {
-    background: #f5a623;
-    color: #f5a623;
-}
-
-.signal-dot.green {
-    background: #4cd137;
-    color: #4cd137;
-}
-
-.signal-text {
-    color: var(--text-main);
-    flex: 1;
-}
-
-.signal-val {
-    font-weight: 800;
-    min-width: 60px;
-    text-align: right;
-}
-
-.rec-box {
-    padding: 12px 14px;
-    background: rgba(227, 6, 19, 0.05);
-    border-radius: 10px;
-    border-left: 4px solid var(--rpk-red);
-}
-
-.rec-box .rec-label {
+.rec-section .rec-title {
     font-size: 0.6rem;
-    font-weight: 800;
+    font-weight: 700;
     color: var(--rpk-red);
     text-transform: uppercase;
     letter-spacing: 1px;
     margin-bottom: 6px;
 }
 
-.rec-box .rec-text {
-    font-size: 0.8rem;
-    line-height: 1.6;
+.rec-item {
+    font-size: 0.78rem;
     color: var(--text-main);
+    padding: 3px 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.rec-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.rec-dot.red {
+    background: #ff4d4d;
+}
+
+.rec-dot.green {
+    background: #4cd137;
+}
+
+.rec-dot.yellow {
+    background: #f5a623;
 }
