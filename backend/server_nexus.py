@@ -246,7 +246,7 @@ async def get_hub_stats():
             SELECT AVG(Carga_Dia / 16.0) as sat_avg 
             FROM carga_centros
             WHERE Centro NOT LIKE '9%' 
-            AND Fecha > current_date() - INTERVAL 30 DAY
+            AND TRY_CAST(Fecha AS DATE) > current_date() - INTERVAL 30 DAY
         """, one=True)
         
         # 3. Cobertura (Analítica Core) - Mantenemos como está o delegamos
@@ -672,14 +672,14 @@ def create_scenario(scenario_data: ScenarioCreate, db: Session = Depends(get_db_
     return db_scenario
 
 @app.get("/api/simulate/base")
-async def get_base_simulation(db: Session = Depends(get_db_sim), dias_laborales: Optional[int] = None, horas_turno: Optional[int] = None):
+async def get_base_simulation(db: Session = Depends(get_db_sim), dias_laborales: Optional[int] = None, horas_turno: Optional[int] = None, use_actual: bool = False):
     try:
-        return simulation_core.get_simulation_data(db, dias_laborales=dias_laborales, horas_turno=horas_turno)
+        return simulation_core.get_simulation_data(db, dias_laborales=dias_laborales, horas_turno=horas_turno, use_actual=use_actual)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/simulate/{scenario_id}")
-async def get_scenario_simulation(scenario_id: int, db: Session = Depends(get_db_sim), dias_laborales: Optional[int] = None, horas_turno: Optional[int] = None):
+async def get_scenario_simulation(scenario_id: int, db: Session = Depends(get_db_sim), dias_laborales: Optional[int] = None, horas_turno: Optional[int] = None, use_actual: bool = False):
     try:
         db_sc = db.query(models_sim.Scenario).filter(models_sim.Scenario.id == scenario_id).first()
         if not db_sc:
@@ -694,20 +694,22 @@ async def get_scenario_simulation(scenario_id: int, db: Session = Depends(get_db
             scenario_id, 
             dias_laborales=d_lab, 
             horas_turno=h_tur, 
-            center_configs=c_conf
+            center_configs=c_conf,
+            use_actual=use_actual
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/simulate/preview")
-async def get_preview_simulation(payload: PreviewPayload, db: Session = Depends(get_db_sim)):
+async def get_preview_simulation(payload: PreviewPayload, db: Session = Depends(get_db_sim), use_actual: bool = False):
     try:
         return simulation_core.get_simulation_data(
             db, 
             overrides_list=payload.overrides, 
             dias_laborales=payload.dias_laborales,
             horas_turno=payload.horas_turno,
-            center_configs=payload.center_configs
+            center_configs=payload.center_configs,
+            use_actual=use_actual
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -11,6 +11,7 @@ let updateTimeout;
 let isComparisonMode = false;
 let comparisonData = null;
 let comparisonViewMode = 'absolute'; // 'absolute' or 'delta'
+let isModeActual = false;
 
 function debounce(func, wait) {
     return function (...args) {
@@ -68,8 +69,8 @@ async function loadSimulation(scenarioId) {
     }
 
     const url = scenarioId === 'base'
-        ? `${API_BASE}/simulate/base?dias_laborales=${days}&horas_turno=${shifts}`
-        : `${API_BASE}/simulate/${scenarioId}?dias_laborales=${days}&horas_turno=${shifts}`;
+        ? `${API_BASE}/simulate/base?dias_laborales=${days}&horas_turno=${shifts}&use_actual=${isModeActual}`
+        : `${API_BASE}/simulate/${scenarioId}?dias_laborales=${days}&horas_turno=${shifts}&use_actual=${isModeActual}`;
 
     document.getElementById('current-scenario-name').innerText = 'Cargando datos...';
     setLoading(true);
@@ -81,7 +82,8 @@ async function loadSimulation(scenarioId) {
         if (scenarioId === 'base') baseData = currentData;
 
         currentScenarioId = scenarioId;
-        const sName = scenarioId === 'base' ? 'Escenario Base' : scenarios.find(s => s.id == scenarioId)?.name || 'Escenario';
+        const baseName = isModeActual ? 'Escenario Actual (ERP)' : 'Escenario Base';
+        const sName = scenarioId === 'base' ? baseName : scenarios.find(s => s.id == scenarioId)?.name || 'Escenario';
         document.getElementById('current-scenario-name').innerText = sName;
 
         if (scenarioId !== 'base' && currentData.meta) {
@@ -130,7 +132,11 @@ function updateNavItemActive(id) {
     if (isComparisonMode) {
         document.getElementById('btn-compare')?.classList.add('active');
     } else if (id === 'base') {
-        document.getElementById('btn-base')?.classList.add('active');
+        if (isModeActual) {
+            document.getElementById('btn-actual')?.classList.add('active');
+        } else {
+            document.getElementById('btn-base')?.classList.add('active');
+        }
     } else {
         document.getElementById('btn-manage')?.classList.add('active');
     }
@@ -600,11 +606,23 @@ function setupEventListeners() {
     };
 
     document.getElementById('btn-base').onclick = () => {
+        isModeActual = false;
         localOverrides = [];
         centerConfigs = {};
         currentScenarioId = 'base';
         loadSimulation('base');
     };
+
+    const btnActual = document.getElementById('btn-actual');
+    if (btnActual) {
+        btnActual.onclick = () => {
+            isModeActual = true;
+            localOverrides = [];
+            centerConfigs = {};
+            currentScenarioId = 'base';
+            loadSimulation('base');
+        };
+    }
 
     document.getElementById('work-days').oninput = debounce(() => updatePreviewSimulation(), 500);
     document.getElementById('work-shifts').onchange = () => updatePreviewSimulation();
@@ -773,7 +791,7 @@ async function updatePreviewSimulation() {
     const shifts = document.getElementById('work-shifts').value || 16;
     setLoading(true);
     try {
-        const res = await fetch(`${API_BASE}/simulate/preview`, {
+        const res = await fetch(`${API_BASE}/simulate/preview?use_actual=${isModeActual}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

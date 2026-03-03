@@ -40,6 +40,10 @@ Este documento es la **fuente de la verdad arquitectónica** para la IA y los de
 | `/api/reports/stock-pdf` | POST | Generación PDF Stock (`backend/api/pdf_stock.py`) |
 | `/api/reports/tiempos-pdf` | POST | Generación PDF Tiempos (`backend/api/pdf_tiempos.py`) |
 | `/api/reports/pedidos-pdf` | POST | Generación PDF Pedidos (`backend/api/pdf_pedidos.py`) |
+| `/api/simulate/base` | GET | Carga dataframe del simulador. Acepta flag `?use_actual=true` para Motor Demanda ERP |
+| `/api/simulate/{scenario}` | GET | Simulador mutado según DB. Acepta flag `?use_actual=true` |
+| `/api/simulate/preview` | POST | Preview on-the-fly (`overrides_list`) sin guardado. Acepta flag `?use_actual=true` |
+| `/api/scenarios` | GET/POST | Listado y Creación de escenarios |
 
 ### Resiliencia de Red
 - Todo acceso a `Y:\` envuelto en `try/except`. Si hay file lock → `logging.warning` + terminación silenciosa.
@@ -80,5 +84,7 @@ Este documento es la **fuente de la verdad arquitectónica** para la IA y los de
 
 | Fecha | Versión | Cambios |
 |-------|---------|---------|
+| Mar 2026 | v5.5.1 | Evolución "Camino Dorado": V2 Motor Analítico inyectado en Simulador V1 (Demanda Neta real) vía `use_actual` |
+| Mar 2026 | v5.5 | Integración nativa del Simulador V1 Classic (Zero-Latency con SQLAlchemy/Calamine/Cache .pkl) |
 | Feb 2026 | v5.5 RC | Motor ETL Data Lakehouse, UI Glassmorphism, PDF Reports (Stock, Tiempos, Pedidos), Módulo Albaranes |
 | Ene 2026 | v5.0 | Base FastAPI + DuckDB |

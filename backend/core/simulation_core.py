@@ -4,10 +4,11 @@ import time
 import functools
 from sqlalchemy.orm import Session
 from typing import List
+from datetime import datetime, timedelta
 
 # Configuración de rutas para RPK NEXUS
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-EXCEL_PATH = os.path.join(BASE_DIR, "db", "MAESTRO FLEJE_v1.xlsx")
+EXCEL_PATH = os.path.join(BASE_DIR, "MAESTRO FLEJE_v1.xlsx")
 
 try:
     from backend.db import models_sim as database
@@ -28,7 +29,7 @@ def time_it(func):
         start_time = time.perf_counter()
         result = func(*args, **kwargs)
         end_time = time.perf_counter()
-        print(f"⏱️ [PERF] {func.__name__} tardó {end_time - start_time:.4f} segundos")
+        print(f"[PERF] {func.__name__} tardó {end_time - start_time:.4f} segundos")
         return result
     return wrapper
 
@@ -48,18 +49,18 @@ def get_base_dataframe():
 
     try:
         if use_cache:
-            print(f"🚀 Cargando desde caché binaria (Modo Ultra Rápido)...", flush=True)
+            print(f"[INFO] Cargando desde caché binaria (Modo Ultra Rápido)...", flush=True)
             start_load = time.perf_counter()
             _df_cache = pd.read_pickle(CACHE_PATH)
             end_load = time.perf_counter()
-            print(f"✅ Caché cargada en {end_load - start_load:.4f} segundos.", flush=True)
+            print(f"[OK] Caché cargada en {end_load - start_load:.4f} segundos.", flush=True)
         else:
-            print(f"🚀 Cargando Excel Maestro por primera vez desde: {EXCEL_PATH}...", flush=True)
+            print(f"[INFO] Cargando Excel Maestro por primera vez desde: {EXCEL_PATH}...", flush=True)
             if not os.path.exists(EXCEL_PATH):
                 raise FileNotFoundError(f"No se encuentra el archivo maestro en: {EXCEL_PATH}")
             
             start_load = time.perf_counter()
-            _df_cache = pd.read_excel(EXCEL_PATH)
+            _df_cache = pd.read_excel(EXCEL_PATH, engine="calamine")
             
             # Limpieza básica inicial
             _df_cache['Articulo'] = _df_cache['Articulo'].astype(str).str.replace(r'\.0$', '', regex=True)
@@ -67,14 +68,14 @@ def get_base_dataframe():
             _df_cache = _df_cache[~_df_cache['Centro'].isin(['nan', 'NaN', 'None', '', 'nan.0'])].copy()
             
             end_load = time.perf_counter()
-            print(f"✅ Excel cargado en {end_load - start_load:.4f} segundos.", flush=True)
+            print(f"[OK] Excel cargado en {end_load - start_load:.4f} segundos.", flush=True)
             
             # Guardar caché para la próxima vez
-            print(f"🔄 Generando caché binaria para acelerar futuros arranques...", flush=True)
+            print(f"[INFO] Generando caché binaria para acelerar futuros arranques...", flush=True)
             _df_cache.to_pickle(CACHE_PATH)
             
     except Exception as e:
-        print(f"❌ Error al cargar DataFrame maestro: {e}")
+        print(f"[ERROR] Error al cargar DataFrame maestro: {e}")
         return None
 
     # Asegurar que centro_original existe (por si la caché es vieja)
@@ -166,10 +167,103 @@ def calculate_saturation(df: pd.DataFrame, dias_laborales_override: int = None, 
     
     return df
 
+def get_pedidos_actuales(dias_laborales: int = None):
+    try:
+        pedidos_dir = os.path.join(BASE_DIR, "data_lake", "transaccional", "pedidos")
+        if not os.path.exists(pedidos_dir):
+            return None
+
+        years = sorted([d for d in os.listdir(pedidos_dir) if d.startswith("year=")], reverse=True)
+        if not years: return None
+        
+        months = sorted([d for d in os.listdir(os.path.join(pedidos_dir, years[0])) if d.startswith("month=")], reverse=True)
+        if not months: return None
+        
+        day_dir = os.path.join(pedidos_dir, years[0], months[0])
+        files = sorted([f for f in os.listdir(day_dir) if f.endswith(".parquet")], reverse=True)
+        if not files: return None
+        
+        latest_parquet = os.path.join(day_dir, files[0])
+        df_orders = pd.read_parquet(latest_parquet)
+        df_orders.columns = [str(c).strip().upper() for c in df_orders.columns]
+
+        if dias_laborales is not None:
+            horizonte = datetime.now() + timedelta(days=int(dias_laborales))
+            if 'FECHA_ENTREGA' in df_orders.columns:
+                df_orders['FECHA_ENTREGA'] = pd.to_datetime(df_orders['FECHA_ENTREGA'], errors='coerce')
+                df_orders = df_orders[(df_orders['FECHA_ENTREGA'] <= horizonte) | (df_orders['FECHA_ENTREGA'].isna())].copy()
+
+        if 'CANT_PENDIENTE' in df_orders.columns:
+            df_orders['CANT_PENDIENTE'] = pd.to_numeric(df_orders['CANT_PENDIENTE'], errors='coerce').fillna(0)
+            df_demanda = df_orders.groupby('ARTICULO')['CANT_PENDIENTE'].sum().reset_index()
+            df_demanda.columns = ['ARTICULO_lake', 'DEMANDA_ACTUAL']
+            return df_demanda
+        
+        return None
+    except Exception as e:
+        print(f"[ERROR] Error en get_pedidos_actuales: {e}")
+        return None
+
+def get_stock_actual():
+    try:
+        stock_dir = os.path.join(BASE_DIR, "data_lake", "transaccional", "existencias")
+        if not os.path.exists(stock_dir):
+            return None
+        
+        years = sorted([d for d in os.listdir(stock_dir) if d.startswith("year=")], reverse=True)
+        if not years: return None
+        
+        months = sorted([d for d in os.listdir(os.path.join(stock_dir, years[0])) if d.startswith("month=")], reverse=True)
+        if not months: return None
+        
+        day_dir = os.path.join(stock_dir, years[0], months[0])
+        files = sorted([f for f in os.listdir(day_dir) if f.endswith(".parquet")], reverse=True)
+        if not files: return None
+        
+        latest_parquet = os.path.join(day_dir, files[0])
+        df_stock = pd.read_parquet(latest_parquet)
+        df_stock.columns = [str(c).strip().upper() for c in df_stock.columns]
+        
+        if 'ARTICULO' in df_stock.columns and 'CANTIDAD' in df_stock.columns:
+            df_stock['CANTIDAD'] = pd.to_numeric(df_stock['CANTIDAD'], errors='coerce').fillna(0)
+            df_res = df_stock.groupby('ARTICULO')['CANTIDAD'].sum().reset_index()
+            df_res.columns = ['ARTICULO_lake', 'STOCK_ACTUAL']
+            return df_res
+        
+        return None
+    except Exception as e:
+        print(f"[ERROR] Error en get_stock_actual: {e}")
+        return None
+
 @time_it
-def get_simulation_data(db: Session, scenario_id: int = None, dias_laborales: int = None, overrides_list: List = None, horas_turno: int = None, center_configs: dict = None):
+def get_simulation_data(db: Session, scenario_id: int = None, dias_laborales: int = None, overrides_list: List = None, horas_turno: int = None, center_configs: dict = None, use_actual: bool = False):
     # En lugar de pd.read_excel, usamos la caché
     df = get_base_dataframe()
+    
+    # --- Lógica de Camino Dorado (V2) ---
+    if use_actual:
+        df_pedidos = get_pedidos_actuales(dias_laborales)
+        df_stock = get_stock_actual()
+        
+        if df_pedidos is not None:
+            # Mergear vectorizadamente por artículo
+            df = df.merge(df_pedidos, left_on='Articulo', right_on='ARTICULO_lake', how='left')
+            df['DEMANDA_ACTUAL'] = df['DEMANDA_ACTUAL'].fillna(0)
+            
+            if df_stock is not None:
+                df = df.merge(df_stock, left_on='Articulo', right_on='ARTICULO_lake', how='left')
+                df['STOCK_ACTUAL'] = df['STOCK_ACTUAL'].fillna(0)
+                # Demanda Neta (Evitando valores negativos con clip)
+                df['Volumen anual'] = (df['DEMANDA_ACTUAL'] - df['STOCK_ACTUAL']).clip(lower=0)
+                
+                # Limpiamos las columnas temporales del merge
+                df = df.drop(columns=['ARTICULO_lake_x', 'ARTICULO_lake_y', 'DEMANDA_ACTUAL', 'STOCK_ACTUAL'], errors='ignore')
+            else:
+                df['Volumen anual'] = df['DEMANDA_ACTUAL']
+                df = df.drop(columns=['ARTICULO_lake', 'DEMANDA_ACTUAL'], errors='ignore')
+        else:
+            df['Volumen anual'] = 0
+    # ------------------------------------
     
     # Asegurar que horas_turno es entero
     h_turno = int(horas_turno) if horas_turno is not None else 16
