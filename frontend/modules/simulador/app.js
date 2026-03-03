@@ -360,9 +360,13 @@ function renderLocalOverrides() {
     }).join('');
 }
 
-function removeOverride(i) {
+async function removeOverride(i) {
     localOverrides.splice(i, 1);
-    updatePreviewSimulation();
+    if (isComparisonMode) {
+        await triggerCompareRecalculation();
+    } else {
+        await updatePreviewSimulation();
+    }
 }
 
 async function loadScenarioHistory(id) {
@@ -902,6 +906,7 @@ async function runCompare() {
 let comparisonViewMetric = 'Saturacion'; // 'Saturacion', 'OEE', 'Carga', 'FTE'
 let comparisonSelectedCenters = [];
 let compareHasEdits = false;
+let currentDrillDownCenter = null;
 
 function enterComparisonMode() {
     document.body.classList.add('compare-mode');
@@ -1043,7 +1048,7 @@ function populateCompareFilters() {
     allCenters.forEach(c => {
         const isChecked = comparisonSelectedCenters.includes(c);
         const label = document.createElement('label');
-        label.className = 'dropdown-item';
+        label.className = 'checkbox-item';
         label.innerHTML = `<input type="checkbox" value="${c}" ${isChecked ? 'checked' : ''}><span>${c}</span>`;
         list.appendChild(label);
     });
@@ -1198,6 +1203,7 @@ function renderCompareChart() {
 }
 
 function openDrillDown(centro) {
+    currentDrillDownCenter = centro;
     const dB = comparisonData.dataB.detail || [];
     const artsB = dB.filter(d => String(d.Centro) === String(centro));
 
@@ -1330,6 +1336,7 @@ async function triggerCompareRecalculation() {
         comparisonData.dataB = newData;
         renderCompareAll();
         renderLocalOverrides();
+        if (currentDrillDownCenter) openDrillDown(currentDrillDownCenter);
     } catch (e) {
         alert(e.message);
     } finally {
@@ -1353,11 +1360,16 @@ function renderImpactAnalysis() {
     const fteB = dB.reduce((acc, d) => acc + (d.Horas_Hombre || 0), 0) / (daysB * 8);
     const deltaFTE = fteB - fteA;
 
-    // Centros modificados
+    // Centros modificados: Consideramos cualquier override local O una diferencia de saturación > 0.1%
     const modifiedCenters = [];
+    const centersInOverrides = new Set(localOverrides.map(o => o.centro));
+
     sB.forEach(sbItem => {
         const saItem = sA.find(s => String(s.Centro) === String(sbItem.Centro));
-        if (!saItem || Math.abs(sbItem.Saturacion - saItem.Saturacion) > 0.02) {
+        const hasOverride = centersInOverrides.has(String(sbItem.Centro));
+        const hasSatDiff = saItem && Math.abs(sbItem.Saturacion - saItem.Saturacion) > 0.001;
+
+        if (hasOverride || hasSatDiff) {
             modifiedCenters.push(sbItem.Centro);
         }
     });
@@ -1371,7 +1383,7 @@ function renderImpactAnalysis() {
                 <div class="rec-dot ${modifiedCenters.length > 0 ? 'yellow' : 'flat'}"></div>
                 <div>${modifiedCenters.length} centros con variaciones respecto al base.</div>
             </div>
-            ${modifiedCenters.length > 0 ? `<div style="font-size:0.7rem; color:var(--text-muted); margin-left:12px;">${modifiedCenters.slice(0, 5).join(', ')}${modifiedCenters.length > 5 ? '...' : ''}</div>` : ''}
+            ${modifiedCenters.length > 0 ? `<div style="font-size:0.7rem; color:var(--text-muted); margin-left:12px;">${modifiedCenters.slice(0, 8).join(', ')}${modifiedCenters.length > 8 ? '...' : ''}</div>` : ''}
         </div>
         <div class="rec-section">
             <div class="rec-title">Nivel de Criticidad (>85%)</div>
