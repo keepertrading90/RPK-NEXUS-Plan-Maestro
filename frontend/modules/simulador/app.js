@@ -90,19 +90,9 @@ async function loadSimulation(scenarioId) {
             document.getElementById('work-days').value = currentData.meta.dias_laborales || 238;
             document.getElementById('work-shifts').value = currentData.meta.horas_turno_global || 16;
             centerConfigs = currentData.meta.center_configs || {};
-            localOverrides = currentData.meta.applied_overrides || [];
-
-            // Map original values from baseData for diff visualization
-            localOverrides.forEach(ov => {
-                const baseItem = baseData?.detail.find(d => d.Articulo == ov.articulo && d.Centro == ov.centro);
-                if (baseItem) {
-                    ov.original_oee = baseItem['%OEE'];
-                    ov.original_ppm = baseItem['Piezas por minuto'];
-                    ov.original_demanda = baseItem['Volumen anual'];
-                    ov.original_shifts = baseItem['horas_turno'] || 16;
-                    ov.original_mod = baseItem['Ratio_MOD'] || 1.0;
-                }
-            });
+            // DO NOT pre-populate localOverrides with saved overrides.
+            // localOverrides should only contain NEW edits made in the current session.
+            localOverrides = [];
         }
 
         // Cargar paneles laterales
