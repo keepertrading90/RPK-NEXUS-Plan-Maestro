@@ -476,9 +476,14 @@ function populateWorkCenters() {
     // Create Checkboxes
     // Changed: Handlers moved to inputs. Text (span) has no click handler.
     let html = `
-        <div class="checkbox-item">
-            <input type="checkbox" id="cb-all" onchange="toggleSelectAll()" ${selectedCenters.length === 0 || selectedCenters.includes('all') ? 'checked' : ''}>
-            <span style="margin-left:8px;">-- Todos los Centros --</span>
+        <div class="checkbox-item" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+            <div style="display: flex; align-items: center;">
+                <input type="checkbox" id="cb-all" onchange="toggleSelectAll()" ${selectedCenters.length === 0 || selectedCenters.includes('all') ? 'checked' : ''}>
+                <span style="margin-left:8px;">-- Todos los Centros --</span>
+            </div>
+            <button onclick="resetCenterConfigs(event)" style="background:var(--dark-surface); border:1px solid var(--border-color); color:var(--text-muted); padding:2px 6px; border-radius:3px; font-size:0.65rem; cursor:pointer;" onmouseover="this.style.color='white'; this.style.borderColor='#888'" onmouseout="this.style.color='var(--text-muted)'; this.style.borderColor='var(--border-color)'">
+                Reset MOD/Turnos
+            </button>
         </div>
         <div style="border-bottom: 1px solid var(--border-color); margin: 5px 0;"></div>
     `;
@@ -541,6 +546,13 @@ async function setCenterRatio(centro, ratio, event) {
     if (event) event.stopPropagation();
     if (!centerConfigs[String(centro)]) centerConfigs[String(centro)] = {};
     centerConfigs[String(centro)].personnel_ratio = parseFloat(ratio);
+    await updatePreviewSimulation();
+}
+
+async function resetCenterConfigs(event) {
+    if (event) event.stopPropagation();
+    centerConfigs = {};
+    populateWorkCenters(); // Rerender to show default values
     await updatePreviewSimulation();
 }
 
