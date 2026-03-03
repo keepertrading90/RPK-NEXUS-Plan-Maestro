@@ -795,6 +795,10 @@ def delete_scenario(scenario_id: int, db: Session = Depends(get_db_sim)):
     db_scenario = db.query(models_sim.Scenario).filter(models_sim.Scenario.id == scenario_id).first()
     if not db_scenario:
         raise HTTPException(status_code=404, detail="Scenario not found")
+        
+    db.query(models_sim.ScenarioDetail).filter(models_sim.ScenarioDetail.scenario_id == scenario_id).delete()
+    db.query(models_sim.ScenarioHistory).filter(models_sim.ScenarioHistory.scenario_id == scenario_id).delete()
+    
     db.delete(db_scenario)
     db.commit()
     return {"message": "Scenario deleted"}
