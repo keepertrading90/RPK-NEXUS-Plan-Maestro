@@ -1004,14 +1004,14 @@ function renderKPICards() {
         if (abs > 0.05) cls = (k.inv ? k.delta > 0 : k.delta < 0) ? 'up' : 'down';
         const arrow = cls === 'up' ? '▲' : cls === 'down' ? '▼' : '●';
         const activeCls = comparisonViewMetric === k.id ? 'active' : '';
-        return \`
-            <div class="kpi-card \${activeCls}" onclick="setCompareMetric('\${k.id}')">
-                <div class="kpi-label">\${k.label}</div>
-                <div class="kpi-value">\${k.value}</div>
-                <div class="kpi-delta \${cls}">\${arrow} \${k.fmt(k.delta)}</div>
-                <div class="kpi-sub">vs \${comparisonData.nameA}</div>
+        return `
+            <div class="kpi-card ${activeCls}" onclick="setCompareMetric('${k.id}')">
+                <div class="kpi-label">${k.label}</div>
+                <div class="kpi-value">${k.value}</div>
+                <div class="kpi-delta ${cls}">${arrow} ${k.fmt(k.delta)}</div>
+                <div class="kpi-sub">vs ${comparisonData.nameA}</div>
             </div>
-        \`;
+        `;
     }).join('');
 }
 
@@ -1022,8 +1022,8 @@ function populateCompareFilters() {
     
     const sel = document.getElementById('compare-center-select');
     if (!sel) return;
-    sel.innerHTML = \`<option value="">-- Filtrar Centros Específicos --</option>\` + 
-        allCenters.map(c => \`<option value="\${c}">\${c}</option>\`).join('');
+    sel.innerHTML = `<option value="">-- Filtrar Centros Específicos --</option>` + 
+        allCenters.map(c => `<option value="${c}">${c}</option>`).join('');
 }
 
 function onCompareFilterChange() {
@@ -1085,7 +1085,7 @@ function renderCompareChart() {
     const ctx = document.getElementById('compareChart');
     if (!ctx) return;
     
-    document.getElementById('compare-chart-title').innerText = \`\${comparisonViewMetric} por Centro — \${comparisonData.nameA} vs \${comparisonData.nameB}\`;
+    document.getElementById('compare-chart-title').innerText = `${comparisonViewMetric} por Centro — ${comparisonData.nameA} vs ${comparisonData.nameB}`;
 
     if (compareChartInstance) compareChartInstance.destroy();
 
@@ -1174,18 +1174,18 @@ function openDrillDown(centro) {
 
     const panel = document.createElement('div');
     panel.className = 'drilldown-panel';
-    panel.innerHTML = \`
+    panel.innerHTML = `
         <div class="drill-header">
-            <div class="drill-title">Centro \${centro}</div>
+            <div class="drill-title">Centro ${centro}</div>
             <button class="drill-back" onclick="renderCompareChart()">✕ Cerrar</button>
         </div>
         <div style="margin-bottom: 15px; display:flex; gap:10px; align-items:center;">
             <label style="font-size:0.65rem; color:var(--text-muted); text-transform:uppercase;">Turnos:</label>
-            <select class="dark-input" style="padding: 3px 6px; font-size:0.75rem; min-width:80px;" onchange="applyCompareCenterEdit('\${centro}', this.value)">
-                <option value="auto" \${turnosVal === 'auto' ? 'selected' : ''}>Auto</option>
-                <option value="8" \${turnosVal === 8 ? 'selected' : ''}>1 (8h)</option>
-                <option value="16" \${turnosVal === 16 ? 'selected' : ''}>2 (16h)</option>
-                <option value="24" \${turnosVal === 24 ? 'selected' : ''}>3 (24h)</option>
+            <select class="dark-input" style="padding: 3px 6px; font-size:0.75rem; min-width:80px;" onchange="applyCompareCenterEdit('${centro}', this.value)">
+                <option value="auto" ${turnosVal === 'auto' ? 'selected' : ''}>Auto</option>
+                <option value="8" ${turnosVal === 8 ? 'selected' : ''}>1 (8h)</option>
+                <option value="16" ${turnosVal === 16 ? 'selected' : ''}>2 (16h)</option>
+                <option value="24" ${turnosVal === 24 ? 'selected' : ''}>3 (24h)</option>
             </select>
         </div>
         <table class="drill-table">
@@ -1200,26 +1200,26 @@ function openDrillDown(centro) {
                 </tr>
             </thead>
             <tbody>
-                \${artsB.map(r => \`
+                ${artsB.map(r => `
                     <tr>
-                        <td style="font-weight:600">\${r.Articulo}</td>
+                        <td style="font-weight:600">${r.Articulo}</td>
                         <td style="display:flex;flex-direction:column;gap:3px">
-                            <input title="Setup (Hrs)" type="number" class="dark-input" style="width:36px; padding:2px; font-size:0.7rem;" value="\${(r.Setup || 0)}" onblur="applyCompareEdit('\${r.Articulo}','Setup', this.value)">
-                            <select title="Traslado" class="dark-input" style="width:36px; padding:2px; font-size:0.7rem;" onchange="applyCompareEdit('\${r.Articulo}','Requiere_Traslado', this.value)">
-                                <option value="1" \${r.Requiere_Traslado ? 'selected':''}>Si</option>
-                                <option value="0" \${!r.Requiere_Traslado ? 'selected':''}>No</option>
+                            <input title="Setup (Hrs)" type="number" class="dark-input" style="width:36px; padding:2px; font-size:0.7rem;" value="${(r.Setup || 0)}" onblur="applyCompareEdit('${r.Articulo}','Setup', this.value)">
+                            <select title="Traslado" class="dark-input" style="width:36px; padding:2px; font-size:0.7rem;" onchange="applyCompareEdit('${r.Articulo}','Requiere_Traslado', this.value)">
+                                <option value="1" ${r.Requiere_Traslado ? 'selected':''}>Si</option>
+                                <option value="0" ${!r.Requiere_Traslado ? 'selected':''}>No</option>
                             </select>
                         </td>
-                        <td><input type="number" class="dark-input" style="width:55px; padding:2px; font-size:0.7rem;" value="\${Math.round(r.Demanda_Neta || r.Demanda || 0)}" onblur="applyCompareEdit('\${r.Articulo}', 'Demanda', this.value)"></td>
-                        <td><input type="number" class="dark-input" style="width:40px; padding:2px; font-size:0.7rem;" value="\${(r['%OEE']*100).toFixed(1)}" onblur="applyCompareEdit('\${r.Articulo}', 'OEE', this.value)"></td>
-                        <td><input type="number" class="dark-input" style="width:32px; padding:2px; font-size:0.7rem;" value="\${(r.Ratio_Personas_Maquina || 1.0)}" onblur="applyCompareEdit('\${r.Articulo}', 'Ratio_Personas_Maquina', this.value)"></td>
-                        <td><input type="number" class="dark-input" style="width:44px; padding:2px; font-size:0.7rem;" value="\${r.PPM || 0}" onblur="applyCompareEdit('\${r.Articulo}', 'PPM', this.value)"></td>
+                        <td><input type="number" class="dark-input" style="width:55px; padding:2px; font-size:0.7rem;" value="${Math.round(r.Demanda_Neta || r.Demanda || 0)}" onblur="applyCompareEdit('${r.Articulo}', 'Demanda', this.value)"></td>
+                        <td><input type="number" class="dark-input" style="width:40px; padding:2px; font-size:0.7rem;" value="${(r['%OEE']*100).toFixed(1)}" onblur="applyCompareEdit('${r.Articulo}', 'OEE', this.value)"></td>
+                        <td><input type="number" class="dark-input" style="width:32px; padding:2px; font-size:0.7rem;" value="${(r.Ratio_Personas_Maquina || 1.0)}" onblur="applyCompareEdit('${r.Articulo}', 'Ratio_Personas_Maquina', this.value)"></td>
+                        <td><input type="number" class="dark-input" style="width:44px; padding:2px; font-size:0.7rem;" value="${r.PPM || 0}" onblur="applyCompareEdit('${r.Articulo}', 'PPM', this.value)"></td>
                     </tr>
-                \`).join('')}
+                `).join('')}
             </tbody>
         </table>
         <div style="font-size: 0.65rem; color: var(--rpk-red); margin-top: 10px;">★ Los cambios recalculan el Escenario B en vivo.</div>
-    \`;
+    `;
     
     body.appendChild(panel);
     compareChartInstance.resize();
@@ -1266,7 +1266,7 @@ async function triggerCompareRecalculation() {
             }
         };
 
-        const res = await fetch(\`\${API_BASE}/simulate\`, {
+        const res = await fetch(`${API_BASE}/simulate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -1312,30 +1312,30 @@ function renderImpactAnalysis() {
 
     const bar = document.getElementById('impact-bar');
     if (!bar) return;
-    bar.innerHTML = \`
+    bar.innerHTML = `
         <div class="rec-section">
             <div class="rec-title">Cambios Identificados</div>
             <div class="rec-item">
-                <div class="rec-dot \${modifiedCenters.length > 0 ? 'yellow' : 'flat'}"></div>
-                <div>\${modifiedCenters.length} centros con variaciones respecto al base.</div>
+                <div class="rec-dot ${modifiedCenters.length > 0 ? 'yellow' : 'flat'}"></div>
+                <div>${modifiedCenters.length} centros con variaciones respecto al base.</div>
             </div>
-            \${modifiedCenters.length > 0 ? \`<div style="font-size:0.7rem; color:var(--text-muted); margin-left:12px;">\${modifiedCenters.slice(0,5).join(', ')}\${modifiedCenters.length > 5 ? '...' : ''}</div>\` : ''}
+            ${modifiedCenters.length > 0 ? `<div style="font-size:0.7rem; color:var(--text-muted); margin-left:12px;">${modifiedCenters.slice(0,5).join(', ')}${modifiedCenters.length > 5 ? '...' : ''}</div>` : ''}
         </div>
         <div class="rec-section">
             <div class="rec-title">Nivel de Criticidad (>85%)</div>
             <div class="rec-item">
-                <div class="rec-dot \${critB > critA ? 'red' : critB < critA ? 'green' : 'yellow'}"></div>
-                <div>\${critB} centros críticos críticos. \${critB > critA ? \`(+ \${critB - critA} vs Base)\` : critB < critA ? \`(- \${critA - critB} vs Base)\`:''}</div>
+                <div class="rec-dot ${critB > critA ? 'red' : critB < critA ? 'green' : 'yellow'}"></div>
+                <div>${critB} centros críticos críticos. ${critB > critA ? `(+ ${critB - critA} vs Base)` : critB < critA ? `(- ${critA - critB} vs Base)`:''}</div>
             </div>
         </div>
         <div class="rec-section">
             <div class="rec-title">Previsión de RRHH</div>
             <div class="rec-item">
-                <div class="rec-dot \${deltaFTE > 5 ? 'red' : deltaFTE < -5 ? 'green' : 'yellow'}"></div>
-                <div>Necesidad calculada: \${deltaFTE > 0 ? '+' : ''}\${deltaFTE.toFixed(1)} FTE vs Base.</div>
+                <div class="rec-dot ${deltaFTE > 5 ? 'red' : deltaFTE < -5 ? 'green' : 'yellow'}"></div>
+                <div>Necesidad calculada: ${deltaFTE > 0 ? '+' : ''}${deltaFTE.toFixed(1)} FTE vs Base.</div>
             </div>
         </div>
-    \`;
+    `;
 }
 
 function attemptExitComparison() {
@@ -1364,7 +1364,7 @@ async function confirmExitComparison(action) {
         setLoading(true);
         try {
             savePayload.name = comparisonData.nameB;
-            await fetch(\`\${API_BASE}/scenarios/\${comparisonData.idB}\`, {
+            await fetch(`${API_BASE}/scenarios/${comparisonData.idB}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(savePayload)
@@ -1381,7 +1381,7 @@ async function confirmExitComparison(action) {
         setLoading(true);
         savePayload.name = name;
         try {
-            await fetch(\`\${API_BASE}/scenarios\`, {
+            await fetch(`${API_BASE}/scenarios`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(savePayload)
@@ -1417,7 +1417,7 @@ function exitComparisonMode() {
     const dashboardGrid = document.querySelector('.compare-layout');
     if (dashboardGrid) {
         dashboardGrid.className = 'dashboard-grid';
-        dashboardGrid.innerHTML = \`
+        dashboardGrid.innerHTML = `
             <div class="dash-card chart-card">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                     <h4 style="margin: 0;">Saturación por Centro (%)</h4>
@@ -1431,7 +1431,7 @@ function exitComparisonMode() {
                 <h4>Resumen de Capacidad</h4>
                 <div id="summary-stats" class="summary-content"></div>
             </div>
-        \`;
+        `;
     }
 
     const tableCard = document.querySelector('.table-card');
