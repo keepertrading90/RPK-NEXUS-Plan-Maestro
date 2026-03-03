@@ -671,44 +671,65 @@ function setupEventListeners() {
             e.preventDefault();
             const articulo = document.getElementById('edit-articulo').value;
             const centroBase = document.getElementById('edit-centro').value;
-            const oee = parseFloat(document.getElementById('edit-oee').value) / 100 || 0;
-            const ppm = parseFloat(document.getElementById('edit-ppm').value) || 0;
-            const demanda = parseFloat(document.getElementById('edit-demanda').value) || 0;
-            const new_centro = document.getElementById('edit-new-centro').value;
-            const shifts = document.getElementById('edit-shifts').value;
 
+            // Read form values
+            const formOee = parseFloat(document.getElementById('edit-oee').value) / 100 || 0;
+            const formPpm = parseFloat(document.getElementById('edit-ppm').value) || 0;
+            const formDemanda = parseFloat(document.getElementById('edit-demanda').value) || 0;
+            const formNewCentro = document.getElementById('edit-new-centro').value;
+            const formShifts = document.getElementById('edit-shifts').value;
+            const formMod = parseFloat(document.getElementById('edit-mod').value) || null;
+            const formSetup = parseFloat(document.getElementById('edit-setup').value) || 0;
+
+            // Source of truth: baseData originals
+            const b = baseData?.detail?.find(item => String(item.Articulo) == String(articulo) && String(item.Centro) == String(centroBase));
+            const origOee = b ? b['%OEE'] : 0;
+            const origPpm = b ? (b['Piezas por minuto'] || 0) : 0;
+            const origDem = b ? (b['Volumen anual'] || 0) : 0;
+            const origShifts = b ? (b.horas_turno || 16) : 16;
+            const origSetup = b ? (b['Setup (h)'] || 0) : 0;
+            const origMod = b ? (b.Ratio_MOD || 1.0) : 1.0;
+
+            // Only include fields that actually changed (smart diffing)
+            const thresh = 0.001; // tolerance for float comparison
             const override = {
                 articulo,
                 centro: centroBase,
-                oee_override: oee,
-                ppm_override: ppm,
-                demanda_override: demanda,
-                new_centro: new_centro,
-                horas_turno_override: shifts ? parseInt(shifts) : null,
-                personnel_ratio_override: parseFloat(document.getElementById('edit-mod').value) || null,
-                setup_time_override: parseFloat(document.getElementById('edit-setup').value) || 0
+                oee_override: Math.abs(formOee - origOee) > thresh ? formOee : null,
+                ppm_override: Math.abs(formPpm - origPpm) > thresh ? formPpm : null,
+                demanda_override: Math.abs(formDemanda - origDem) > 0.5 ? formDemanda : null,
+                new_centro: (formNewCentro && String(formNewCentro) !== String(centroBase)) ? formNewCentro : null,
+                horas_turno_override: (formShifts && parseInt(formShifts) !== origShifts) ? parseInt(formShifts) : null,
+                personnel_ratio_override: (formMod && Math.abs(formMod - origMod) > thresh) ? formMod : null,
+                setup_time_override: Math.abs(formSetup - origSetup) > thresh ? formSetup : null,
+                // Store originals for diff visualization
+                original_oee: origOee,
+                original_ppm: origPpm,
+                original_demanda: origDem,
+                original_shifts: origShifts,
+                original_setup: origSetup,
+                original_mod: origMod
             };
 
-            const idx = localOverrides.findIndex(o => o.articulo == articulo && o.centro == centroBase);
+            // Only save if at least one field actually changed
+            const hasChanges = override.oee_override !== null || override.ppm_override !== null ||
+                override.demanda_override !== null || override.new_centro !== null ||
+                override.horas_turno_override !== null || override.personnel_ratio_override !== null ||
+                override.setup_time_override !== null;
 
-            // Capture original values from baseData (source of truth)
-            const b = baseData?.detail.find(item => item.Articulo == articulo && item.Centro == centroBase);
-            override.original_oee = b ? b['%OEE'] : 0;
-            override.original_ppm = b ? b['Piezas por minuto'] : 0;
-            override.original_demanda = b ? b['Volumen anual'] : 0;
-            override.original_shifts = b ? (b.horas_turno || 16) : 16;
-            override.original_setup = b ? (b['Setup (h)'] || 0) : 0;
-            override.original_mod = b ? (b.Ratio_MOD || 1.0) : 1.0;
+            if (!hasChanges) {
+                document.getElementById('edit-modal').style.display = 'none';
+                return; // No real changes, skip
+            }
 
+            const idx = localOverrides.findIndex(o => String(o.articulo) == String(articulo) && String(o.centro) == String(centroBase));
             if (idx >= 0) localOverrides[idx] = override;
             else localOverrides.push(override);
 
             document.getElementById('edit-modal').style.display = 'none';
 
             if (isComparisonMode) {
-                // Si estamos en comparativa, recalculamos el escenario B
                 await triggerCompareRecalculation();
-                // Re-abrimos el drilldown para ver el cambio reflejado en la tabla
                 openDrillDown(centroBase);
             } else {
                 await updatePreviewSimulation();
