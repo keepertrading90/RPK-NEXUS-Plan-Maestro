@@ -279,11 +279,13 @@ def get_simulation_data(db: Session, scenario_id: int = None, dias_laborales: in
                 if 'personnel_ratio' in config:
                     df.loc[mask_c, 'Ratio_MOD'] = float(config['personnel_ratio'])
     
+    # Overrides are ADDITIVE: first apply DB overrides from scenario, then frontend overrides on top
     selected_overrides = []
     if scenario_id:
-        selected_overrides = db.query(database.ScenarioDetail).filter(database.ScenarioDetail.scenario_id == scenario_id).all()
-    elif overrides_list:
-        selected_overrides = overrides_list
+        selected_overrides = list(db.query(database.ScenarioDetail).filter(database.ScenarioDetail.scenario_id == scenario_id).all())
+    if overrides_list:
+        # Frontend overrides are applied AFTER DB overrides (they take priority)
+        selected_overrides = selected_overrides + list(overrides_list)
 
     for ov in selected_overrides:
         # Pydantic models (de server.py) o SQLAlchemy objects tienen atributos similares

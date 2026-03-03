@@ -758,6 +758,20 @@ function setupEventListeners() {
     });
 }
 
+function cleanOverridesForSave(overrides) {
+    return (overrides || []).map(o => ({
+        articulo: String(o.articulo),
+        centro: String(o.centro),
+        oee_override: o.oee_override ?? null,
+        ppm_override: o.ppm_override ?? null,
+        demanda_override: o.demanda_override ?? null,
+        new_centro: o.new_centro ?? null,
+        horas_turno_override: o.horas_turno_override ?? null,
+        setup_time_override: o.setup_time_override ?? null,
+        personnel_ratio_override: o.personnel_ratio_override ?? null
+    }));
+}
+
 async function performSaveScenario(name, overwriteId = null) {
     const days = parseInt(document.getElementById('work-days').value);
     const shifts = parseInt(document.getElementById('work-shifts').value);
@@ -775,7 +789,7 @@ async function performSaveScenario(name, overwriteId = null) {
                 dias_laborales: days,
                 horas_turno_global: shifts,
                 center_configs: centerConfigs,
-                overrides: localOverrides
+                overrides: cleanOverridesForSave(localOverrides)
             })
         });
 
@@ -790,6 +804,7 @@ async function performSaveScenario(name, overwriteId = null) {
         }
     } catch (e) {
         console.error(e);
+        alert('Error de red al guardar: ' + e.message);
     } finally {
         setLoading(false);
     }
@@ -843,8 +858,14 @@ function openEditModal(articulo, centro) {
     document.getElementById('edit-modal').style.display = 'flex';
 }
 
-function renderManageList() {
+async function renderManageList() {
+    // Refrescar la lista de escenarios desde el servidor antes de renderizar
+    await loadScenarios();
     const container = document.getElementById('manage-list-container');
+    if (!scenarios || scenarios.length === 0) {
+        container.innerHTML = '<p class="empty-state" style="padding: 2rem; text-align: center; opacity: 0.6;">No hay escenarios guardados.</p>';
+        return;
+    }
     container.innerHTML = scenarios.map(s => `
         <div class="card" style="margin-bottom: 0.5rem; padding: 1rem; display: flex; justify-content: space-between; align-items: center;">
             <span style="font-weight: 600;">${s.name}</span>
@@ -868,9 +889,9 @@ window.deleteScenarioInline = async (id) => {
     } catch (e) { alert("Error al eliminar"); }
 };
 
-window.loadAndClose = (id) => {
-    loadSimulation(id);
+window.loadAndClose = async (id) => {
     document.getElementById('manage-modal').style.display = 'none';
+    await loadSimulation(id);
 };
 
 async function runCompare() {
@@ -1453,11 +1474,14 @@ function attemptExitComparison() {
 }
 
 async function confirmExitComparison(action) {
-    let savePayload = {
-        overrides: localOverrides,
+    const meta = comparisonData.dataB.meta || {};
+    const buildPayload = (name) => ({
+        name,
+        dias_laborales: meta.dias_laborales || parseInt(document.getElementById('work-days').value) || 238,
+        horas_turno_global: meta.horas_turno_global || parseInt(document.getElementById('work-shifts').value) || 16,
         center_configs: centerConfigs,
-        config: comparisonData.dataB.meta || { dias_laborales: 238, turno_general: 16 }
-    };
+        overrides: cleanOverridesForSave(localOverrides)
+    });
 
     if (action === 'overwrite') {
         if (comparisonData.idB === 'base' || comparisonData.idB === 'actual') {
@@ -1466,12 +1490,12 @@ async function confirmExitComparison(action) {
         }
         setLoading(true);
         try {
-            savePayload.name = comparisonData.nameB;
-            await fetch(`${API_BASE}/scenarios/${comparisonData.idB}`, {
+            const res = await fetch(`${API_BASE}/scenarios/${comparisonData.idB}/full`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(savePayload)
+                body: JSON.stringify(buildPayload(comparisonData.nameB))
             });
+            if (!res.ok) { const e = await res.json(); throw new Error(e.detail || 'Error'); }
             alert('Escenario sobreescrito correctamente.');
         } catch (e) {
             alert('No se pudo guardar: ' + e.message);
@@ -1482,13 +1506,13 @@ async function confirmExitComparison(action) {
         const name = document.getElementById('new-scenario-name').value;
         if (!name) return alert('Por favor, ingresa un nombre para el nuevo escenario');
         setLoading(true);
-        savePayload.name = name;
         try {
-            await fetch(`${API_BASE}/scenarios`, {
+            const res = await fetch(`${API_BASE}/scenarios`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(savePayload)
+                body: JSON.stringify(buildPayload(name))
             });
+            if (!res.ok) { const e = await res.json(); throw new Error(e.detail || 'Error'); }
             alert('Nuevo escenario generado.');
         } catch (e) {
             alert('Error al guardar: ' + e.message);
@@ -1503,14 +1527,22 @@ async function confirmExitComparison(action) {
     localOverrides = [];
     centerConfigs = {};
     renderLocalOverrides();
+    await loadScenarios();
     exitComparisonMode();
 }
 
 function exitComparisonMode() {
+    // Full state reset
     isComparisonMode = false;
+    comparisonData = null;
+    comparisonSelectedCenters = [];
+    compareHasEdits = false;
+    currentDrillDownCenter = null;
+
     document.body.classList.remove('compare-mode');
     document.getElementById('comparison-controls').style.display = 'none';
-    document.querySelector('.right-panel').style.display = '';
+    const rightPanel = document.querySelector('.right-panel');
+    if (rightPanel) rightPanel.style.display = '';
 
     if (compareChartInstance) { compareChartInstance.destroy(); compareChartInstance = null; }
 
@@ -1538,10 +1570,11 @@ function exitComparisonMode() {
     }
 
     const tableCard = document.querySelector('.table-card');
-    if (tableCard) {
-        tableCard.style.display = '';
-    }
+    if (tableCard) tableCard.style.display = '';
+
+    // Remove any leftover drilldown panels
+    document.querySelectorAll('.drilldown-panel').forEach(p => p.remove());
 
     if (currentScenarioId) loadSimulation(currentScenarioId);
-    else updateUI();
+    else loadSimulation('base');
 }
