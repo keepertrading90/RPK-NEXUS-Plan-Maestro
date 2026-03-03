@@ -929,10 +929,10 @@ function enterComparisonMode() {
             <!-- Row 2: Filter Bar -->
             <div class="compare-filter-bar" id="compare-filter-bar">
                 <div class="panel-title">Filtro de Centros:</div>
-                <select id="compare-center-select" multiple size="1" style="height:32px" onchange="onCompareFilterChange()">
+                <select id="compare-center-select" multiple size="1" style="height:32px; background:#fff; color:#000; border-radius:4px; padding:0 5px; cursor:pointer;" onchange="onCompareFilterChange()">
                     <!-- options -->
                 </select>
-                <button onclick="resetCompareFilter()">Restablecer Top 15</button>
+                <button onclick="resetCompareFilter()" style="cursor:pointer;">Restablecer Top 15</button>
             </div>
 
             <!-- Row 3: Chart + Drill-down -->
@@ -1019,11 +1019,11 @@ function populateCompareFilters() {
     if (!comparisonData?.dataB) return;
     const sB = comparisonData.dataB.summary || [];
     const allCenters = sB.map(s => String(s.Centro)).sort();
-    
+
     const sel = document.getElementById('compare-center-select');
     if (!sel) return;
-    sel.innerHTML = `<option value="">-- Filtrar Centros Específicos --</option>` + 
-        allCenters.map(c => `<option value="${c}">${c}</option>`).join('');
+    sel.innerHTML = `<option value="" style="color:#000;">-- Filtrar Centros Específicos --</option>` +
+        allCenters.map(c => `<option value="${c}" style="color:#000;">${c}</option>`).join('');
 }
 
 function onCompareFilterChange() {
@@ -1043,7 +1043,7 @@ function resetCompareFilter() {
 function getCompareMetricValue(centroId, dataObj) {
     const s = (dataObj.summary || []).find(x => String(x.Centro) === String(centroId));
     const dArts = (dataObj.detail || []).filter(x => String(x.Centro) === String(centroId));
-    
+
     if (comparisonViewMetric === 'Saturacion') return s ? s.Saturacion * 100 : 0;
     if (comparisonViewMetric === 'Carga') return dArts.reduce((acc, a) => acc + (a.Horas_Totales || 0), 0);
     if (comparisonViewMetric === 'OEE') {
@@ -1060,18 +1060,18 @@ function getCompareMetricValue(centroId, dataObj) {
 
 function renderCompareChart() {
     if (!comparisonData?.dataA || !comparisonData?.dataB) return;
-    
+
     const sA = comparisonData.dataA.summary || [];
     const sB = comparisonData.dataB.summary || [];
     const allCenters = [...new Set([...sA.map(s => String(s.Centro)), ...sB.map(s => String(s.Centro))])].sort();
 
     let targetCenters = allCenters;
-    
+
     if (comparisonSelectedCenters.length > 0) {
         targetCenters = comparisonSelectedCenters;
     } else {
         // Top 15 by Saturation in B
-        targetCenters = [...allCenters].sort((a,b) => {
+        targetCenters = [...allCenters].sort((a, b) => {
             const satA = sB.find(s => String(s.Centro) === a)?.Saturacion || 0;
             const satB = sB.find(s => String(s.Centro) === b)?.Saturacion || 0;
             return satB - satA;
@@ -1084,7 +1084,7 @@ function renderCompareChart() {
 
     const ctx = document.getElementById('compareChart');
     if (!ctx) return;
-    
+
     document.getElementById('compare-chart-title').innerText = `${comparisonViewMetric} por Centro — ${comparisonData.nameA} vs ${comparisonData.nameB}`;
 
     if (compareChartInstance) compareChartInstance.destroy();
@@ -1121,14 +1121,22 @@ function renderCompareChart() {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            onClick: (e, elements) => {
+            onClick: (e, elements, chart) => {
+                let idx = -1;
                 if (elements.length > 0) {
-                    const idx = elements[0].index;
+                    idx = elements[0].index;
+                } else {
+                    const points = chart.getElementsAtEventForMode(e, 'index', { intersect: false }, true);
+                    if (points.length > 0) idx = points[0].index;
+                }
+
+                if (idx !== -1) {
                     openDrillDown(labels[idx]);
                 }
             },
-            onHover: (e, elements) => {
-                e.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
+            onHover: (e, elements, chart) => {
+                const points = chart.getElementsAtEventForMode(e, 'index', { intersect: false }, true);
+                e.native.target.style.cursor = points.length > 0 ? 'pointer' : 'default';
             },
             scales: {
                 y: {
@@ -1159,13 +1167,13 @@ function renderCompareChart() {
 function openDrillDown(centro) {
     const dB = comparisonData.dataB.detail || [];
     const artsB = dB.filter(d => String(d.Centro) === String(centro));
-    
+
     // Preparar el HTML del drilldown
     const body = document.getElementById('compare-body');
     if (!body) return;
-    
+
     body.classList.add('has-drill');
-    
+
     // Eliminar el actual si existe
     const existing = document.querySelector('.drilldown-panel');
     if (existing) existing.remove();
@@ -1206,12 +1214,12 @@ function openDrillDown(centro) {
                         <td style="display:flex;flex-direction:column;gap:3px">
                             <input title="Setup (Hrs)" type="number" class="dark-input" style="width:36px; padding:2px; font-size:0.7rem;" value="${(r.Setup || 0)}" onblur="applyCompareEdit('${r.Articulo}','Setup', this.value)">
                             <select title="Traslado" class="dark-input" style="width:36px; padding:2px; font-size:0.7rem;" onchange="applyCompareEdit('${r.Articulo}','Requiere_Traslado', this.value)">
-                                <option value="1" ${r.Requiere_Traslado ? 'selected':''}>Si</option>
-                                <option value="0" ${!r.Requiere_Traslado ? 'selected':''}>No</option>
+                                <option value="1" ${r.Requiere_Traslado ? 'selected' : ''}>Si</option>
+                                <option value="0" ${!r.Requiere_Traslado ? 'selected' : ''}>No</option>
                             </select>
                         </td>
                         <td><input type="number" class="dark-input" style="width:55px; padding:2px; font-size:0.7rem;" value="${Math.round(r.Demanda_Neta || r.Demanda || 0)}" onblur="applyCompareEdit('${r.Articulo}', 'Demanda', this.value)"></td>
-                        <td><input type="number" class="dark-input" style="width:40px; padding:2px; font-size:0.7rem;" value="${(r['%OEE']*100).toFixed(1)}" onblur="applyCompareEdit('${r.Articulo}', 'OEE', this.value)"></td>
+                        <td><input type="number" class="dark-input" style="width:40px; padding:2px; font-size:0.7rem;" value="${(r['%OEE'] * 100).toFixed(1)}" onblur="applyCompareEdit('${r.Articulo}', 'OEE', this.value)"></td>
                         <td><input type="number" class="dark-input" style="width:32px; padding:2px; font-size:0.7rem;" value="${(r.Ratio_Personas_Maquina || 1.0)}" onblur="applyCompareEdit('${r.Articulo}', 'Ratio_Personas_Maquina', this.value)"></td>
                         <td><input type="number" class="dark-input" style="width:44px; padding:2px; font-size:0.7rem;" value="${r.PPM || 0}" onblur="applyCompareEdit('${r.Articulo}', 'PPM', this.value)"></td>
                     </tr>
@@ -1220,7 +1228,7 @@ function openDrillDown(centro) {
         </table>
         <div style="font-size: 0.65rem; color: var(--rpk-red); margin-top: 10px;">★ Los cambios recalculan el Escenario B en vivo.</div>
     `;
-    
+
     body.appendChild(panel);
     compareChartInstance.resize();
 }
@@ -1238,7 +1246,7 @@ async function applyCompareEdit(articulo, field, value) {
         override = { Articulo: articulo };
         localOverrides.push(override);
     }
-    
+
     let floatVal = parseFloat(value);
     if (field === 'OEE') {
         override['%OEE'] = floatVal / 100.0;
@@ -1248,7 +1256,7 @@ async function applyCompareEdit(articulo, field, value) {
 
     const centro = comparisonData.dataB.detail.find(d => String(d.Articulo) === String(articulo))?.Centro;
     await triggerCompareRecalculation();
-    if(centro) openDrillDown(centro);
+    if (centro) openDrillDown(centro);
 }
 
 async function triggerCompareRecalculation() {
@@ -1262,7 +1270,7 @@ async function triggerCompareRecalculation() {
             config: {
                 dias_laborales: parseInt(document.getElementById('work-days').value) || 238,
                 turno_general: parseInt(document.getElementById('work-shifts').value) || 16,
-                use_actual: false 
+                use_actual: false
             }
         };
 
@@ -1271,10 +1279,10 @@ async function triggerCompareRecalculation() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-        
+
         if (!res.ok) throw new Error('Error al recalcular escenario B');
         const newData = await res.json();
-        
+
         comparisonData.dataB = newData;
         renderCompareAll();
         renderLocalOverrides();
@@ -1291,10 +1299,10 @@ function renderImpactAnalysis() {
     const sB = comparisonData.dataB.summary || [];
     const dA = comparisonData.dataA.detail || [];
     const dB = comparisonData.dataB.detail || [];
-    
+
     const critA = sA.filter(s => s.Saturacion > 0.85).length;
     const critB = sB.filter(s => s.Saturacion > 0.85).length;
-    
+
     const daysA = comparisonData.dataA.meta?.dias_laborales || 238;
     const daysB = comparisonData.dataB.meta?.dias_laborales || 238;
     const fteA = dA.reduce((acc, d) => acc + (d.Horas_Hombre || 0), 0) / (daysA * 8);
@@ -1319,13 +1327,13 @@ function renderImpactAnalysis() {
                 <div class="rec-dot ${modifiedCenters.length > 0 ? 'yellow' : 'flat'}"></div>
                 <div>${modifiedCenters.length} centros con variaciones respecto al base.</div>
             </div>
-            ${modifiedCenters.length > 0 ? `<div style="font-size:0.7rem; color:var(--text-muted); margin-left:12px;">${modifiedCenters.slice(0,5).join(', ')}${modifiedCenters.length > 5 ? '...' : ''}</div>` : ''}
+            ${modifiedCenters.length > 0 ? `<div style="font-size:0.7rem; color:var(--text-muted); margin-left:12px;">${modifiedCenters.slice(0, 5).join(', ')}${modifiedCenters.length > 5 ? '...' : ''}</div>` : ''}
         </div>
         <div class="rec-section">
             <div class="rec-title">Nivel de Criticidad (>85%)</div>
             <div class="rec-item">
                 <div class="rec-dot ${critB > critA ? 'red' : critB < critA ? 'green' : 'yellow'}"></div>
-                <div>${critB} centros críticos críticos. ${critB > critA ? `(+ ${critB - critA} vs Base)` : critB < critA ? `(- ${critA - critB} vs Base)`:''}</div>
+                <div>${critB} centros críticos críticos. ${critB > critA ? `(+ ${critB - critA} vs Base)` : critB < critA ? `(- ${critA - critB} vs Base)` : ''}</div>
             </div>
         </div>
         <div class="rec-section">
@@ -1393,9 +1401,9 @@ async function confirmExitComparison(action) {
             setLoading(false);
         }
     }
-    
+
     document.getElementById('save-modal').style.display = 'none';
-    
+
     // Clear and exit
     localOverrides = [];
     centerConfigs = {};
