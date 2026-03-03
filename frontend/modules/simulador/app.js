@@ -887,6 +887,8 @@ async function runCompare() {
         }
 
         comparisonData = {
+            idA: scA,
+            idB: scB,
             nameA: scA === 'base' ? 'Base' : scenarios.find(s => s.id == scA).name,
             nameB: scB === 'base' ? 'Base' : scenarios.find(s => s.id == scB).name,
             dataA: await resA.json(),
@@ -1274,7 +1276,12 @@ function openDrillDown(centro) {
         </div>
     `;
     body.appendChild(panel);
-    compareChartInstance.resize();
+    if (compareChartInstance) compareChartInstance.resize();
+
+    // Auto-scroll suave al detalle
+    setTimeout(() => {
+        panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 50);
 }
 
 function closeDrillDown() {
@@ -1313,9 +1320,21 @@ async function triggerCompareRecalculation() {
     setLoading(true);
     compareHasEdits = true;
     try {
+        const cleanOverrides = localOverrides.map(o => ({
+            articulo: String(o.articulo),
+            centro: String(o.centro),
+            oee_override: o.oee_override,
+            ppm_override: o.ppm_override,
+            demanda_override: o.demanda_override,
+            new_centro: o.new_centro,
+            horas_turno_override: o.horas_turno_override,
+            setup_time_override: o.setup_time_override,
+            personnel_ratio_override: o.personnel_ratio_override
+        }));
+
         const payload = {
             base_scenario_id: comparisonData.idB,
-            overrides: localOverrides,
+            overrides: cleanOverrides,
             center_configs: centerConfigs,
             config: {
                 dias_laborales: parseInt(document.getElementById('work-days').value) || 238,
@@ -1377,7 +1396,7 @@ function renderImpactAnalysis() {
     const bar = document.getElementById('impact-bar');
     if (!bar) return;
     bar.innerHTML = `
-        <div class="rec-section">
+        <div class="rec-section" style="cursor:pointer" title="Ver estos centros en el gráfico">
             <div class="rec-title">Cambios Identificados</div>
             <div class="rec-item">
                 <div class="rec-dot ${modifiedCenters.length > 0 ? 'yellow' : 'flat'}"></div>
@@ -1385,21 +1404,41 @@ function renderImpactAnalysis() {
             </div>
             ${modifiedCenters.length > 0 ? `<div style="font-size:0.7rem; color:var(--text-muted); margin-left:12px;">${modifiedCenters.slice(0, 8).join(', ')}${modifiedCenters.length > 8 ? '...' : ''}</div>` : ''}
         </div>
-        <div class="rec-section">
+        <div class="rec-section" style="cursor:pointer" title="Ver centros críticos en el gráfico">
             <div class="rec-title">Nivel de Criticidad (>85%)</div>
             <div class="rec-item">
                 <div class="rec-dot ${critB > critA ? 'red' : critB < critA ? 'green' : 'yellow'}"></div>
                 <div>${critB} centros críticos críticos. ${critB > critA ? `(+ ${critB - critA} vs Base)` : critB < critA ? `(- ${critA - critB} vs Base)` : ''}</div>
             </div>
         </div>
-        <div class="rec-section">
+        <div class="rec-section" style="cursor:pointer" title="Ver impacto de personal en el gráfico">
             <div class="rec-title">Previsión de RRHH</div>
             <div class="rec-item">
-                <div class="rec-dot ${deltaFTE > 5 ? 'red' : deltaFTE < -5 ? 'green' : 'yellow'}"></div>
+                <div class="rec-dot ${Math.abs(deltaFTE) > 5 ? 'red' : Math.abs(deltaFTE) < 1 ? 'green' : 'yellow'}"></div>
                 <div>Necesidad calculada: ${deltaFTE > 0 ? '+' : ''}${deltaFTE.toFixed(1)} FTE vs Base.</div>
             </div>
         </div>
     `;
+
+    // Interactividad
+    const sections = bar.querySelectorAll('.rec-section');
+    sections[0].onclick = () => {
+        comparisonSelectedCenters = modifiedCenters;
+        renderCompareChart();
+    };
+    sections[1].onclick = () => {
+        comparisonSelectedCenters = sB.filter(s => s.Saturacion > 0.85).map(s => String(s.Centro));
+        renderCompareChart();
+    };
+    sections[2].onclick = () => {
+        // Centros con mayor variacion de FTE
+        comparisonSelectedCenters = sB.filter(sb => {
+            const sa = sA.find(x => String(x.Centro) === String(sb.Centro));
+            const delta = Math.abs((sb.Horas_Carga || 0) - (sa ? sa.Horas_Carga : 0));
+            return delta > 40; // Mas de una semana de trabajo de diferencia
+        }).map(s => String(s.Centro));
+        renderCompareChart();
+    };
 }
 
 function attemptExitComparison() {

@@ -101,11 +101,19 @@ class HistoryResponse(BaseModel):
     changes_count: int
     details_snapshot: Optional[str] = None
 
+from typing import List, Optional, Union, Any
+
 class PreviewPayload(BaseModel):
     overrides: List[OverrideBase]
     dias_laborales: Optional[int] = None
     horas_turno: Optional[int] = None
     center_configs: Optional[dict] = None
+
+class ComparisonSimulatePayload(BaseModel):
+    base_scenario_id: Optional[Any] = None
+    overrides: List[OverrideBase] = []
+    center_configs: Optional[dict] = {}
+    config: Optional[dict] = {}
 
 # Auxiliares de Base de Datos
 def query_db(query, args=(), one=False):
@@ -755,6 +763,31 @@ async def get_preview_simulation(payload: PreviewPayload, db: Session = Depends(
             use_actual=use_actual
         )
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/simulate")
+async def post_comparison_simulate(payload: ComparisonSimulatePayload, db: Session = Depends(get_db_sim)):
+    try:
+        # Normalizar ID de escenario base
+        sc_id = payload.base_scenario_id
+        if sc_id == 'base' or sc_id == 0 or sc_id is None:
+            sc_id = None
+        else:
+            sc_id = int(sc_id)
+            
+        config = payload.config or {}
+        
+        return simulation_core.get_simulation_data(
+            db,
+            scenario_id=sc_id,
+            dias_laborales=config.get('dias_laborales'),
+            overrides_list=payload.overrides,
+            horas_turno=config.get('turno_general'),
+            center_configs=payload.center_configs,
+            use_actual=config.get('use_actual', False)
+        )
+    except Exception as e:
+        print(f"[ERROR] post_comparison_simulate: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/api/scenarios/{scenario_id}")
