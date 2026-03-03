@@ -84,6 +84,7 @@ Este documento es la **fuente de la verdad arquitectónica** para la IA y los de
 
 | Fecha | Versión | Cambios |
 |-------|---------|---------|
+| Mar 2026 | v5.5.2 | Comparativa KPI Avanzada, sanitización de ghost history SQLite, overrides dinámicos de MOD y Turnos en simulador |
 | Mar 2026 | v5.5.1 | Evolución "Camino Dorado": V2 Motor Analítico inyectado en Simulador V1 (Demanda Neta real) vía `use_actual` |
 | Mar 2026 | v5.5 | Integración nativa del Simulador V1 Classic (Zero-Latency con SQLAlchemy/Calamine/Cache .pkl) |
 | Feb 2026 | v5.5 RC | Motor ETL Data Lakehouse, UI Glassmorphism, PDF Reports (Stock, Tiempos, Pedidos), Módulo Albaranes |
