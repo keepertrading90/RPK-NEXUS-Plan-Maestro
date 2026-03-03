@@ -60,7 +60,7 @@ def generate_comparativa_pdf(req: ComparativaRequest):
     # --- 1. RESUMEN EJECUTIVO (KPIs) ---
     story.append(Paragraph("1. Resumen Ejecutivo (KPI Globales)", section_title))
     
-    kpi_data = [["Indicador", req.escenario_a, req.escenario_b, "Delta / Impacto"]]
+    kpi_data = [["Indicador / Métrica", req.escenario_a, req.escenario_b, "Impacto Relativo"]]
     for k in req.kpis:
         delta = k.valB - k.valA
         delta_str = f"{'+' if delta > 0 else ''}{format_num(delta)}{k.unit}"
@@ -73,13 +73,13 @@ def generate_comparativa_pdf(req: ComparativaRequest):
             is_good = is_positive if k.higher_is_better else not is_positive
             color = colors.HexColor("#22c55e") if is_good else colors.HexColor("#ef4444")
             
-        color_hex = color.hexval()[2:] # strip 0x
+        color_hex = color.hexval()[2:]
         delta_p = Paragraph(f"<font color='#{color_hex}'><b>{delta_str}</b></font>", normal_style)
         
         kpi_data.append([
             k.name, 
-            f"{format_num(k.valA)}{k.unit}", 
-            f"<b>{format_num(k.valB)}{k.unit}</b>", 
+            Paragraph(f"{format_num(k.valA)}{k.unit}", normal_style), 
+            Paragraph(f"<b>{format_num(k.valB)}{k.unit}</b>", normal_style), 
             delta_p
         ])
     
@@ -130,16 +130,14 @@ def generate_comparativa_pdf(req: ComparativaRequest):
     story.append(Spacer(1, 20))
 
     # --- 3. AUDITORÍA DE CAMBIOS (OVERRIDES APLICADOS) ---
-    story.append(KeepTogether([
-        Paragraph("3. Registro de Modificaciones Activas", section_title)
-    ]))
+    story.append(Paragraph("3. Desglose Técnico de Modificaciones Activas", section_title))
     
     if req.cambios_activos:
-        cambios_data = [["Tipo", "Detalle Adicional", "Valor Original", "Nuevo Valor"]]
+        cambios_data = [["Sub-Centro / Artículo", "Descripción del Ajuste", "Original / Base", "Nuevo Valor"]]
         for camb in req.cambios_activos:
             cambios_data.append([
-                camb.get("tipo", ""),
-                camb.get("detalle", ""),
+                Paragraph(f"<b>{camb.get('tipo', '')}</b>", normal_style),
+                Paragraph(camb.get("detalle", ""), normal_style),
                 str(camb.get("a", "")),
                 Paragraph(f"<b>{camb.get('b', '')}</b>", normal_style)
             ])
@@ -151,11 +149,12 @@ def generate_comparativa_pdf(req: ComparativaRequest):
             ('ALIGN', (0,0), (-1,-1), 'LEFT'),
             ('GRID', (0,0), (-1,-1), 0.5, colors.lightgrey),
             ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-            ('PADDING', (0,0), (-1,-1), 6),
+            ('PADDING', (0,0), (-1,-1), 8),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
         ]))
         story.append(t_cambios)
     else:
-        story.append(Paragraph("La comparación no detecta inputs manuales (ajustes puramente matemáticos de la matriz de base).", styles["Italic"]))
+        story.append(Paragraph("<i>Validación de Parámetros: No se han detectado desviaciones manuales sobre el maestro en el Escenario B respecto al escenario de referencia.</i>", ParagraphStyle('ItalicInfo', parent=normal_style, fontSize=9, textColor=colors.gray)))
 
     # Footer Configuration
     story.append(Spacer(1, 30))

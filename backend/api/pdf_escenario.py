@@ -59,7 +59,7 @@ def generate_escenario_pdf(req: EscenarioRequest):
     for k in req.kpis:
         kpi_data.append([
             k.name, 
-            f"<b>{format_num(k.value)}{k.unit}</b>"
+            Paragraph(f"<b>{format_num(k.value)}{k.unit}</b>", normal_style)
         ])
     
     t_kpis = Table(kpi_data, colWidths=[3*inch, 2.5*inch])
@@ -111,12 +111,11 @@ def generate_escenario_pdf(req: EscenarioRequest):
     ]))
     
     if req.cambios_activos:
-        cambios_data = [["Sub-Centro / Artículo", "Modificación Aplicada"]]
+        cambios_data = [["Sub-Centro / Artículo", "Modificación Aplicada (Impacto en Matriz)"]]
         for camb in req.cambios_activos:
-            cambios_data.append([
-                camb.get("tipo", ""),
-                camb.get("detalle", "")
-            ])
+            tipo_p = Paragraph(f"<b>{camb.get('tipo', '')}</b>", normal_style)
+            detalle_p = Paragraph(camb.get("detalle", ""), normal_style)
+            cambios_data.append([tipo_p, detalle_p])
             
         t_cambios = Table(cambios_data, colWidths=[2.5*inch, 3*inch])
         t_cambios.setStyle(TableStyle([
@@ -125,11 +124,12 @@ def generate_escenario_pdf(req: EscenarioRequest):
             ('ALIGN', (0,0), (-1,-1), 'LEFT'),
             ('GRID', (0,0), (-1,-1), 0.5, colors.lightgrey),
             ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-            ('PADDING', (0,0), (-1,-1), 6),
+            ('PADDING', (0,0), (-1,-1), 8),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
         ]))
         story.append(t_cambios)
     else:
-        story.append(Paragraph("Este escenario no contiene ajustes manuales sobre el maestro (Escenario Puro).", styles["Italic"]))
+        story.append(Paragraph("<i>Análisis de Integridad: Este escenario se basa exclusivamente en los parámetros maestros del ERP sin modificaciones manuales detectadas.</i>", ParagraphStyle('ItalicInfo', parent=normal_style, fontSize=9, textColor=colors.gray)))
 
     # Footer Configuration
     story.append(Spacer(1, 40))
