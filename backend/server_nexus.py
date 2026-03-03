@@ -668,7 +668,15 @@ def list_scenarios(db: Session = Depends(get_db_sim)):
 
 @app.get("/api/scenarios/{scenario_id}/history", response_model=List[HistoryResponse])
 def get_scenario_history(scenario_id: int, db: Session = Depends(get_db_sim)):
-    hist = db.query(models_sim.ScenarioHistory).filter(models_sim.ScenarioHistory.scenario_id == scenario_id).order_by(models_sim.ScenarioHistory.timestamp.desc()).all()
+    db_scenario = db.query(models_sim.Scenario).filter(models_sim.Scenario.id == scenario_id).first()
+    if not db_scenario:
+        return []
+        
+    hist = db.query(models_sim.ScenarioHistory).filter(
+        models_sim.ScenarioHistory.scenario_id == scenario_id,
+        models_sim.ScenarioHistory.name == db_scenario.name
+    ).order_by(models_sim.ScenarioHistory.timestamp.desc()).all()
+    
     return [{
         "id": h.id,
         "timestamp": h.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
@@ -693,6 +701,11 @@ def create_scenario(scenario_data: ScenarioCreate, db: Session = Depends(get_db_
     db.add(db_scenario)
     db.commit()
     db.refresh(db_scenario)
+    
+    # Bugfix: si SQLite reusa un ID de un escenario borrado previamente, 
+    # eliminamos restos huérfanos que hubieran podido quedar.
+    db.query(models_sim.ScenarioDetail).filter(models_sim.ScenarioDetail.scenario_id == db_scenario.id).delete()
+    db.query(models_sim.ScenarioHistory).filter(models_sim.ScenarioHistory.scenario_id == db_scenario.id).delete()
     
     for ov in scenario_data.overrides:
         db_ov = models_sim.ScenarioDetail(
