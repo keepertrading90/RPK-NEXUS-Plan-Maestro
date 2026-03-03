@@ -40,6 +40,7 @@ Este documento es la **fuente de la verdad arquitectónica** para la IA y los de
 | `/api/reports/stock-pdf` | POST | Generación PDF Stock (`backend/api/pdf_stock.py`) |
 | `/api/reports/tiempos-pdf` | POST | Generación PDF Tiempos (`backend/api/pdf_tiempos.py`) |
 | `/api/reports/pedidos-pdf` | POST | Generación PDF Pedidos (`backend/api/pdf_pedidos.py`) |
+| `/api/reports/comparativa-pdf` | POST | Generación PDF Comparativa (`backend/api/pdf_comparativa.py`) |
 | `/api/simulate/base` | GET | Carga dataframe del simulador. Acepta flag `?use_actual=true` para Motor Demanda ERP |
 | `/api/simulate/{scenario}` | GET | Simulador mutado según DB. Acepta flag `?use_actual=true` |
 | `/api/simulate/preview` | POST | Preview on-the-fly (`overrides_list`) sin guardado. Acepta flag `?use_actual=true` |

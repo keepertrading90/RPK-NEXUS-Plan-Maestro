@@ -1049,7 +1049,10 @@ function enterComparisonMode() {
                 <span class="pill-info" style="background:rgba(227,6,19,0.15); color:var(--rpk-red); border-color:var(--rpk-red)">⚡ MODO COMPARATIVA</span>
                 <span style="font-size: 0.85rem; color: var(--text-muted);">${comparisonData.nameA} <span style="opacity:0.5">VS</span> <strong style="color:#fff">${comparisonData.nameB}</strong></span>
             </div>
-            <button id="btn-exit-compare" class="action-btn small" onclick="attemptExitComparison()" style="background:transparent; color:var(--text-muted); border:1px solid var(--border-color); font-size:0.75rem;">✕ Salir</button>
+            <div style="display: flex; gap: 0.5rem;">
+                <button id="btn-download-compare-pdf" class="action-btn small" onclick="downloadComparePDF()" style="background: rgba(227,6,19,0.1); color: var(--rpk-red); border: 1px solid var(--rpk-red); font-size: 0.75rem;">📥 Informe PDF</button>
+                <button id="btn-exit-compare" class="action-btn small" onclick="attemptExitComparison()" style="background:transparent; color:var(--text-muted); border:1px solid var(--border-color); font-size:0.75rem;">✕ Salir</button>
+            </div>
         `;
     }
 
@@ -1725,4 +1728,103 @@ function exitComparisonMode() {
 
     if (currentScenarioId) loadSimulation(currentScenarioId);
     else loadSimulation('base');
+}
+
+async function downloadComparePDF() {
+    if (!comparisonData?.dataA || !comparisonData?.dataB) return;
+    try {
+        setLoading(true);
+        const sA = comparisonData.dataA.summary || [];
+        const sB = comparisonData.dataB.summary || [];
+        const dA = comparisonData.dataA.detail || [];
+        const dB = comparisonData.dataB.detail || [];
+        const daysA = comparisonData.dataA.meta?.dias_laborales || 238;
+        const daysB = comparisonData.dataB.meta?.dias_laborales || 238;
+        const paramShifts = parseInt(document.getElementById('work-shifts').value) || 16;
+
+        const avgSatA = sA.length ? (sA.reduce((a, s) => a + (s.Saturacion || 0), 0) / sA.length) * 100 : 0;
+        const avgSatB = sB.length ? (sB.reduce((a, s) => a + (s.Saturacion || 0), 0) / sB.length) * 100 : 0;
+        const oeeA = dA.length ? (dA.reduce((a, d) => a + (d['%OEE'] || 0), 0) / dA.length) * 100 : 0;
+        const oeeB = dB.length ? (dB.reduce((a, d) => a + (d['%OEE'] || 0), 0) / dB.length) * 100 : 0;
+        const hoursA = dA.reduce((a, d) => a + (d['Horas_Totales'] || 0), 0);
+        const hoursB = dB.reduce((a, d) => a + (d['Horas_Totales'] || 0), 0);
+        const hhA = dA.reduce((a, d) => a + (d.Horas_Hombre || 0), 0);
+        const hhB = dB.reduce((a, d) => a + (d.Horas_Hombre || 0), 0);
+        const fteA = hhA / (daysA * 8);
+        const fteB = hhB / (daysB * 8);
+
+        const kpis = [
+            { name: 'Saturación Media', valA: avgSatA, valB: avgSatB, unit: '%', higher_is_better: false },
+            { name: 'OEE Global Medio', valA: oeeA, valB: oeeB, unit: '%', higher_is_better: true },
+            { name: 'Carga Máquina Total', valA: hoursA, valB: hoursB, unit: 'h', higher_is_better: false },
+            { name: 'Necesidad Personal (FTE)', valA: fteA, valB: fteB, unit: '', higher_is_better: false }
+        ];
+
+        const centros_impacto = [];
+        sB.forEach(sb => {
+            const sa = sA.find(x => String(x.Centro) === String(sb.Centro));
+            if (sa && Math.abs(sb.Saturacion - sa.Saturacion) > 0.01) {
+                centros_impacto.push({
+                    centro: String(sb.Centro),
+                    sat_a: sa.Saturacion * 100,
+                    sat_b: sb.Saturacion * 100,
+                    mod_a: sa.Ratio_Personas_Maquina || 1,
+                    mod_b: sb.Ratio_Personas_Maquina || 1
+                });
+            }
+        });
+
+        centros_impacto.sort((a, b) => Math.abs(b.sat_b - b.sat_a) - Math.abs(a.sat_b - a.sat_a));
+
+        const cambios_activos = localOverrides.map(ov => {
+            let details = [];
+            if (ov.demanda_override) details.push(`Demanda: ${ov.demanda_override}`);
+            if (ov.ppm_override) details.push(`PPM: ${ov.ppm_override}`);
+            if (ov.oee_override) details.push(`OEE: ${(ov.oee_override * 100).toFixed(1)}%`);
+            if (ov.setup_time_override) details.push(`Setup: ${ov.setup_time_override}h`);
+            if (ov.horas_turno_override) details.push(`Turnos: ${ov.horas_turno_override}h`);
+            if (ov.personnel_ratio_override) details.push(`MOD: ${ov.personnel_ratio_override}`);
+            return {
+                tipo: `Ctro ${ov.centro} - Art. ${ov.articulo}`,
+                detalle: details.join(" | ") || "Sobreescribir activo",
+                a: "Base/Modelo A",
+                b: "Ajuste Directo"
+            };
+        });
+
+        const payload = {
+            escenario_a: comparisonData.nameA,
+            escenario_b: comparisonData.nameB,
+            kpis: kpis,
+            centros_impacto: centros_impacto.slice(0, 15),
+            cambios_activos: cambios_activos,
+            dias_laborales: daysB,
+            turnos: paramShifts
+        };
+
+        const res = await fetch(`${API_BASE}/reports/comparativa-pdf`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) throw new Error('Error al generar PDF');
+
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const safeName = comparisonData.nameB.replace(/ /g, '_');
+        a.download = `Informe_Impacto_vs_${safeName}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        a.remove();
+
+    } catch (e) {
+        console.error(e);
+        alert('Error descargando el informe: ' + e.message);
+    } finally {
+        setLoading(false);
+    }
 }
