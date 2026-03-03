@@ -314,42 +314,66 @@ function renderLocalOverrides() {
     }
 
     container.innerHTML = localOverrides.map((ov, idx) => {
+        // Resolve original values: use stored originals, or look up from baseData/comparisonData
+        let origOee = ov.original_oee;
+        let origPpm = ov.original_ppm;
+        let origDem = ov.original_demanda;
+        let origShifts = ov.original_shifts;
+        let origSetup = ov.original_setup;
+        let origMod = ov.original_mod;
+
+        if (origOee === undefined || origOee === null) {
+            const src = baseData?.detail?.find(d => String(d.Articulo) === String(ov.articulo) && String(d.Centro) === String(ov.centro));
+            if (src) {
+                origOee = src['%OEE'] || 0;
+                origPpm = src['Piezas por minuto'] || 0;
+                origDem = src['Volumen anual'] || 0;
+                origShifts = src['horas_turno'] || 16;
+                origSetup = src['Setup (h)'] || 0;
+                origMod = src['Ratio_MOD'] || 1.0;
+            } else {
+                origOee = 0; origPpm = 0; origDem = 0; origShifts = 16; origSetup = 0; origMod = 1.0;
+            }
+        }
+
+        const showTraslado = ov.new_centro && String(ov.new_centro) !== String(ov.centro);
+
         return `
             <div class="override-item">
                 <button class="btn-remove-ov" onclick="removeOverride(${idx})" title="Eliminar">&times;</button>
                 <h4>${ov.articulo}</h4>
                 <div class="override-info">
-                    ${ov.new_centro ? `<span>➜ Traslado: <b class="val-changed">${ov.new_centro}</b></span>` : ''}
+                    ${showTraslado ? `<span>➜ Traslado: <b class="val-changed">${ov.new_centro}</b></span>` : ''}
                     
-                    ${ov.oee_override ? (() => {
-                const orig = (ov.original_oee * 100).toFixed(1);
+                    ${ov.oee_override != null ? (() => {
+                const orig = ((origOee || 0) * 100).toFixed(1);
                 const newVal = (ov.oee_override * 100).toFixed(1);
                 const changed = orig !== newVal;
                 return `<div>OEE: ${changed ? `<span class="val-original">${orig}%</span><b class="val-changed">➜ ${newVal}%</b>` : `<span>${orig}%</span>`}</div>`;
             })() : ''}
                     
-                    ${ov.ppm_override ? (() => {
-                const orig = Math.round(ov.original_ppm);
+                    ${ov.ppm_override != null ? (() => {
+                const orig = Math.round(origPpm || 0);
                 const newVal = Math.round(ov.ppm_override);
                 const changed = orig !== newVal;
                 return `<div>PPM: ${changed ? `<span class="val-original">${orig}</span><b class="val-changed">➜ ${newVal}</b>` : `<span>${orig}</span>`}</div>`;
             })() : ''}
                     
-                    ${ov.demanda_override ? (() => {
-                const orig = Math.round(ov.original_demanda);
+                    ${ov.demanda_override != null ? (() => {
+                const orig = Math.round(origDem || 0);
                 const newVal = Math.round(ov.demanda_override);
                 const changed = orig !== newVal;
                 return `<div>Dem: ${changed ? `<span class="val-original">${orig.toLocaleString()}</span><b class="val-changed">➜ ${newVal.toLocaleString()}</b>` : `<span>${orig.toLocaleString()}</span>`}</div>`;
             })() : ''}
-                    ${ov.horas_turno_override ? (() => {
-                const orig = ov.original_shifts;
+                    ${ov.horas_turno_override != null ? (() => {
+                const orig = origShifts || 16;
                 const newVal = ov.horas_turno_override;
                 const changed = orig != newVal;
                 return `<div>Turnos: ${changed ? `<span class="val-original">${orig}h</span><b class="val-changed">➜ ${newVal}h</b>` : `<span>${orig}h</span>`}</div>`;
             })() : ''}
 
                     ${ov.setup_time_override !== undefined && ov.setup_time_override !== null ? (() => {
-                const orig = (ov.original_setup || 0).toFixed(1);
+                const orig = (origSetup || 0).toFixed(1);
                 const newVal = (ov.setup_time_override).toFixed(1);
                 const changed = Math.abs(orig - newVal) > 0.1;
                 return `<div>Setup: ${changed ? `<span class="val-original">${orig}h</span><b class="val-changed">➜ ${newVal}h</b>` : `<span>${orig}h</span>`}</div>`;
