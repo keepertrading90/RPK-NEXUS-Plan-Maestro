@@ -1,4 +1,4 @@
-const API_BASE = '/api';
+﻿const API_BASE = '/api';
 let currentData = null;
 let baseData = null;
 let chartInstance = null;
@@ -897,10 +897,10 @@ function enterComparisonMode() {
         banner.style.display = 'flex';
         banner.innerHTML = `
             <div style="display: flex; align-items: center; gap: 1rem;">
-                <span class="pill-info" style="background:#000; color:#ffc107; border-color:#ffc107">MODO COMPARATIVA KPI</span>
-                <span style="font-size: 0.9rem;">${comparisonData.nameA} <span style="opacity:0.6">vs</span> <strong>${comparisonData.nameB}</strong></span>
+                <span class="pill-info" style="background:rgba(227,6,19,0.15); color:var(--rpk-red); border-color:var(--rpk-red)">⚡ COMPARATIVA</span>
+                <span style="font-size: 0.85rem; color: var(--text-muted);">${comparisonData.nameA} <span style="opacity:0.5">→</span> <strong style="color:#fff">${comparisonData.nameB}</strong></span>
             </div>
-            <button id="btn-exit-compare" class="action-btn small" onclick="exitComparisonMode()" style="background:#000; color:#fff; border:1px solid #444">Cerrar Comparativa</button>
+            <button id="btn-exit-compare" class="action-btn small" onclick="exitComparisonMode()" style="background:transparent; color:var(--text-muted); border:1px solid var(--border-color); font-size:0.75rem;">✕ Cerrar</button>
         `;
     }
 
@@ -909,372 +909,402 @@ function enterComparisonMode() {
 
     const dashboardGrid = document.querySelector('.dashboard-grid');
     if (dashboardGrid) {
-        dashboardGrid.className = 'bento-pro';
+        dashboardGrid.className = 'compare-layout';
         dashboardGrid.innerHTML = `
-            <!-- Tile 1: Radar Multi-KPI -->
-            <div class="tile-radar">
-                <div class="kpi-header">Radar Multi-KPI — 5 Dimensiones</div>
-                <div class="radar-container">
-                    <div class="radar-chart-wrap"><canvas id="radarChart"></canvas></div>
-                    <div class="radar-legend" id="radar-legend"></div>
+            <!-- Row 1: KPI Cards -->
+            <div class="kpi-row" id="kpi-row"></div>
+
+            <!-- Row 2: Chart + Drill-down -->
+            <div class="compare-body no-drill" id="compare-body">
+                <div class="chart-panel">
+                    <div class="panel-title">Saturación por Centro — Base vs Escenario</div>
+                    <div class="chart-wrap"><canvas id="compareChart"></canvas></div>
                 </div>
             </div>
 
-            <!-- Tile 2: Gauge Eficiencia + Riesgo -->
-            <div class="tile-gauge">
-                <div class="kpi-header">Eficiencia Global de Planta</div>
-                <div class="gauge-container" id="gauge-container"></div>
-                <div style="margin-top: 16px;">
-                    <div class="kpi-header">Riesgo Operativo</div>
-                    <div id="risk-score-container"></div>
-                </div>
-            </div>
-
-            <!-- Tile 3: Heatmap Variación -->
-            <div class="tile-heatmap">
-                <div class="kpi-header">Heatmap — Variación Saturación por Centro</div>
-                <div class="heatmap-grid" id="heatmap-grid"></div>
-            </div>
-
-            <!-- Tile 4: Waterfall Capacidad -->
-            <div class="tile-waterfall">
-                <div class="kpi-header">Waterfall — Delta Capacidad (horas)</div>
-                <div class="waterfall-container"><canvas id="waterfallChart"></canvas></div>
-            </div>
-
-            <!-- Tile 5: Decisiones + Recomendaciones -->
-            <div class="tile-decisions">
-                <div class="kpi-header">Semáforo de Decisión</div>
-                <div class="semaphore-list" id="semaphore-list"></div>
-                <div id="recommendation-container" style="margin-top: 12px;"></div>
-            </div>
+            <!-- Row 3: Impact Analysis -->
+            <div class="impact-bar" id="impact-bar"></div>
         `;
     }
 
     const tableCard = document.querySelector('.table-card');
-    if (tableCard) tableCard.classList.add('glass-table');
+    if (tableCard) tableCard.style.display = 'none';
 
     comparisonViewMode = 'absolute';
-    document.getElementById('table-search').value = '';
-
     updateNavItemActive();
-    renderExecutiveInsights();
-    renderComparisonTable();
+    renderKPICards();
+    renderCompareChart();
+    renderImpactAnalysis();
 }
 
-let radarChartInstance = null;
-let waterfallChartInstance = null;
+let compareChartInstance = null;
 
-function renderExecutiveInsights() {
-    if (!comparisonData || !comparisonData.dataA || !comparisonData.dataB) return;
+function renderKPICards() {
+    if (!comparisonData?.dataA || !comparisonData?.dataB) return;
+    const sA = comparisonData.dataA.summary || [];
+    const sB = comparisonData.dataB.summary || [];
+    const dA = comparisonData.dataA.detail || [];
+    const dB = comparisonData.dataB.detail || [];
+    const daysA = comparisonData.dataA.meta?.dias_laborales || 238;
+    const daysB = comparisonData.dataB.meta?.dias_laborales || 238;
 
-    const summaryA = comparisonData.dataA.summary || [];
-    const summaryB = comparisonData.dataB.summary || [];
-    const detailA = comparisonData.dataA.detail || [];
-    const detailB = comparisonData.dataB.detail || [];
-    const daysA = comparisonData.dataA.meta.dias_laborales || 238;
-    const daysB = comparisonData.dataB.meta.dias_laborales || 238;
+    const avgSatA = sA.length ? (sA.reduce((a, s) => a + (s.Saturacion || 0), 0) / sA.length) * 100 : 0;
+    const avgSatB = sB.length ? (sB.reduce((a, s) => a + (s.Saturacion || 0), 0) / sB.length) * 100 : 0;
+    const oeeA = dA.length ? (dA.reduce((a, d) => a + (d['%OEE'] || 0), 0) / dA.length) * 100 : 0;
+    const oeeB = dB.length ? (dB.reduce((a, d) => a + (d['%OEE'] || 0), 0) / dB.length) * 100 : 0;
+    const hoursA = dA.reduce((a, d) => a + (d['Horas_Totales'] || 0), 0);
+    const hoursB = dB.reduce((a, d) => a + (d['Horas_Totales'] || 0), 0);
+    const hhA = dA.reduce((a, d) => a + (d.Horas_Hombre || 0), 0);
+    const hhB = dB.reduce((a, d) => a + (d.Horas_Hombre || 0), 0);
+    const fteA = hhA / (daysA * 8);
+    const fteB = hhB / (daysB * 8);
 
-    // ===== CALCULATIONS =====
-    const avgSatA = summaryA.length > 0 ? (summaryA.reduce((a, s) => a + (s.Saturacion || 0), 0) / summaryA.length) * 100 : 0;
-    const avgSatB = summaryB.length > 0 ? (summaryB.reduce((a, s) => a + (s.Saturacion || 0), 0) / summaryB.length) * 100 : 0;
-
-    const oeeA = detailA.length > 0 ? (detailA.reduce((a, d) => a + (d['%OEE'] || 0), 0) / detailA.length) * 100 : 0;
-    const oeeB = detailB.length > 0 ? (detailB.reduce((a, d) => a + (d['%OEE'] || 0), 0) / detailB.length) * 100 : 0;
-
-    const totalHoursA = detailA.reduce((a, d) => a + (d['Horas_Totales'] || 0), 0);
-    const totalHoursB = detailB.reduce((a, d) => a + (d['Horas_Totales'] || 0), 0);
-
-    const setupA = detailA.reduce((a, d) => a + (d['Tiempo_Setup'] || 0), 0);
-    const setupB = detailB.reduce((a, d) => a + (d['Tiempo_Setup'] || 0), 0);
-
-    const sumHHA = detailA.reduce((a, d) => a + (d.Horas_Hombre || 0), 0);
-    const sumHHB = detailB.reduce((a, d) => a + (d.Horas_Hombre || 0), 0);
-    const fteA = sumHHA / (daysA * 8);
-    const fteB = sumHHB / (daysB * 8);
-
-    // Normalize for radar (scale 0-100)
-    const maxHours = Math.max(totalHoursA, totalHoursB, 1);
-    const maxSetup = Math.max(setupA, setupB, 1);
-    const maxFTE = Math.max(fteA, fteB, 1);
-
-    // ===== 1. RADAR CHART =====
-    const radarCtx = document.getElementById('radarChart');
-    if (radarCtx) {
-        if (radarChartInstance) radarChartInstance.destroy();
-        radarChartInstance = new Chart(radarCtx.getContext('2d'), {
-            type: 'radar',
-            data: {
-                labels: ['Saturación', 'OEE', 'Carga (h)', 'Setup (h)', 'FTE'],
-                datasets: [
-                    {
-                        label: comparisonData.nameA,
-                        data: [avgSatA, oeeA, (totalHoursA / maxHours) * 100, (setupA / maxSetup) * 100, (fteA / maxFTE) * 100],
-                        backgroundColor: 'rgba(100, 100, 100, 0.15)',
-                        borderColor: '#666',
-                        borderWidth: 2,
-                        pointBackgroundColor: '#888'
-                    },
-                    {
-                        label: comparisonData.nameB,
-                        data: [avgSatB, oeeB, (totalHoursB / maxHours) * 100, (setupB / maxSetup) * 100, (fteB / maxFTE) * 100],
-                        backgroundColor: 'rgba(227, 6, 19, 0.15)',
-                        borderColor: '#E30613',
-                        borderWidth: 2,
-                        pointBackgroundColor: '#E30613'
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                scales: {
-                    r: {
-                        beginAtZero: true,
-                        max: 120,
-                        grid: { color: 'rgba(255,255,255,0.05)' },
-                        angleLines: { color: 'rgba(255,255,255,0.05)' },
-                        pointLabels: { color: '#a0a0a0', font: { size: 11, weight: '600' } },
-                        ticks: { display: false }
-                    }
-                },
-                plugins: { legend: { display: false } }
-            }
-        });
-
-        // Radar Legend
-        const legend = document.getElementById('radar-legend');
-        if (legend) {
-            const dims = [
-                { name: 'Saturación', valA: avgSatA.toFixed(1) + '%', valB: avgSatB.toFixed(1) + '%' },
-                { name: 'OEE', valA: oeeA.toFixed(1) + '%', valB: oeeB.toFixed(1) + '%' },
-                { name: 'Carga', valA: totalHoursA.toFixed(0) + 'h', valB: totalHoursB.toFixed(0) + 'h' },
-                { name: 'Setup', valA: setupA.toFixed(0) + 'h', valB: setupB.toFixed(0) + 'h' },
-                { name: 'FTE', valA: fteA.toFixed(1), valB: fteB.toFixed(1) }
-            ];
-            legend.innerHTML = dims.map(d => `
-                <div class="radar-legend-item">
-                    <span style="font-size:0.7rem; color:var(--text-muted)">${d.name}</span>
-                    <span class="leg-val" style="color:#888">${d.valA}</span>
-                    <span style="color:#444">→</span>
-                    <span class="leg-val" style="color:var(--rpk-red)">${d.valB}</span>
-                </div>
-            `).join('');
+    const kpis = [
+        {
+            label: 'Saturación',
+            value: avgSatB.toFixed(1) + '%',
+            delta: avgSatB - avgSatA,
+            format: v => (v > 0 ? '+' : '') + v.toFixed(1) + '%',
+            invert: true // higher = worse
+        },
+        {
+            label: 'OEE Medio',
+            value: oeeB.toFixed(1) + '%',
+            delta: oeeB - oeeA,
+            format: v => (v > 0 ? '+' : '') + v.toFixed(1) + '%',
+            invert: false
+        },
+        {
+            label: 'Carga Total',
+            value: hoursB.toLocaleString('es-ES', { maximumFractionDigits: 0 }) + 'h',
+            delta: hoursB - hoursA,
+            format: v => (v > 0 ? '+' : '') + v.toFixed(0) + 'h',
+            invert: true
+        },
+        {
+            label: 'Personal (FTE)',
+            value: fteB.toFixed(1),
+            delta: fteB - fteA,
+            format: v => (v > 0 ? '+' : '') + v.toFixed(1),
+            invert: true
         }
-    }
+    ];
 
-    // ===== 2. EFFICIENCY GAUGE =====
-    const gaugeEl = document.getElementById('gauge-container');
-    if (gaugeEl) {
-        const efficiency = Math.min(100, Math.max(0, 100 - avgSatB + oeeB * 0.5));
-        const efficiencyA = Math.min(100, Math.max(0, 100 - avgSatA + oeeA * 0.5));
-        const delta = efficiency - efficiencyA;
-        const deltaClass = delta > 1 ? 'positive' : delta < -1 ? 'negative' : 'neutral';
-        const deltaSign = delta > 0 ? '+' : '';
-        const rotation = -90 + (efficiency / 100) * 180;
-
-        gaugeEl.innerHTML = `
-            <div class="gauge-ring">
-                <div class="gauge-fill" style="transform: rotate(${rotation}deg)"></div>
-                <div class="gauge-value">${efficiency.toFixed(1)}%</div>
-            </div>
-            <div class="gauge-label">Índice compuesto: (100 - Sat) + OEE×0.5</div>
-            <div class="gauge-delta ${deltaClass}">${deltaSign}${delta.toFixed(1)} pts vs ${comparisonData.nameA}</div>
-        `;
-    }
-
-    // ===== 3. RISK SCORE =====
-    const riskEl = document.getElementById('risk-score-container');
-    if (riskEl) {
-        const criticalCenters = summaryB.filter(s => s.Saturacion > 0.85).length;
-        const overloadedCenters = summaryB.filter(s => s.Saturacion > 1.0).length;
-        const riskScore = Math.min(100, Math.round(
-            (criticalCenters / Math.max(summaryB.length, 1)) * 40 +
-            (overloadedCenters / Math.max(summaryB.length, 1)) * 40 +
-            (avgSatB > 80 ? 20 : avgSatB > 60 ? 10 : 0)
-        ));
-        const riskColor = riskScore > 70 ? '#ff4d4d' : riskScore > 40 ? '#f5a623' : '#4cd137';
-        const riskLabel = riskScore > 70 ? 'ALTO' : riskScore > 40 ? 'MEDIO' : 'BAJO';
-
-        riskEl.innerHTML = `
-            <div class="risk-container">
-                <div class="risk-bar-bg">
-                    <div class="risk-bar-fill" style="width:${riskScore}%; background:${riskColor}"></div>
-                </div>
-                <div class="risk-value" style="color:${riskColor}">${riskScore}</div>
-            </div>
-            <div style="display:flex; justify-content:space-between; margin-top:4px;">
-                <span style="font-size:0.65rem; color:var(--text-muted)">Centros críticos: ${criticalCenters} | Sobrecarga: ${overloadedCenters}</span>
-                <span style="font-size:0.7rem; font-weight:800; color:${riskColor}">${riskLabel}</span>
+    const row = document.getElementById('kpi-row');
+    if (!row) return;
+    row.innerHTML = kpis.map(k => {
+        const abs = Math.abs(k.delta);
+        let cls = 'flat';
+        if (abs > 0.1) cls = (k.invert ? k.delta > 0 : k.delta < 0) ? 'up' : 'down';
+        const arrow = cls === 'up' ? '▲' : cls === 'down' ? '▼' : '●';
+        return `
+            <div class="kpi-card">
+                <div class="kpi-label">${k.label}</div>
+                <div class="kpi-value">${k.value}</div>
+                <div class="kpi-delta ${cls}">${arrow} ${k.format(k.delta)}</div>
+                <div class="kpi-sub">vs ${comparisonData.nameA}</div>
             </div>
         `;
-    }
+    }).join('');
+}
 
-    // ===== 4. HEATMAP =====
-    const heatmapEl = document.getElementById('heatmap-grid');
-    if (heatmapEl) {
-        const labels = [...new Set([...summaryA.map(s => String(s.Centro)), ...summaryB.map(s => String(s.Centro))])].sort();
-        heatmapEl.innerHTML = labels.map(centro => {
-            const itemA = summaryA.find(s => String(s.Centro) === centro) || { Saturacion: 0 };
-            const itemB = summaryB.find(s => String(s.Centro) === centro) || { Saturacion: 0 };
-            const diff = ((itemB.Saturacion - itemA.Saturacion) * 100);
-            const absDiff = Math.abs(diff);
-            const intensity = Math.min(absDiff / 30, 1);
-            const bg = diff > 0.5
-                ? `rgba(255, 77, 77, ${0.1 + intensity * 0.4})`
-                : diff < -0.5
-                    ? `rgba(76, 209, 55, ${0.1 + intensity * 0.4})`
-                    : 'rgba(255,255,255,0.03)';
-            const barColor = diff > 0.5 ? '#ff4d4d' : diff < -0.5 ? '#4cd137' : '#555';
-            return `
-                <div class="heatmap-cell" style="background:${bg};" title="Centro ${centro}: ${diff > 0 ? '+' : ''}${diff.toFixed(1)}% saturación">
-                    <div class="cell-id">${centro}</div>
-                    <div class="cell-val">${diff > 0 ? '+' : ''}${diff.toFixed(1)}%</div>
-                    <div class="cell-bar" style="background:${barColor}"></div>
-                </div>
-            `;
-        }).join('');
-    }
+function renderCompareChart() {
+    if (!comparisonData?.dataA || !comparisonData?.dataB) return;
+    const sA = comparisonData.dataA.summary || [];
+    const sB = comparisonData.dataB.summary || [];
 
-    // ===== 5. WATERFALL CHART =====
-    const wfCtx = document.getElementById('waterfallChart');
-    if (wfCtx) {
-        if (waterfallChartInstance) waterfallChartInstance.destroy();
-        const labels = [...new Set([...summaryA.map(s => String(s.Centro)), ...summaryB.map(s => String(s.Centro))])].sort();
-        const deltas = labels.map(centro => {
-            const hA = detailA.filter(d => String(d.Centro) === centro).reduce((a, d) => a + (d['Horas_Totales'] || 0), 0);
-            const hB = detailB.filter(d => String(d.Centro) === centro).reduce((a, d) => a + (d['Horas_Totales'] || 0), 0);
-            return { centro, delta: hB - hA };
-        }).filter(d => Math.abs(d.delta) > 0.1).sort((a, b) => b.delta - a.delta);
+    const labels = [...new Set([...sA.map(s => String(s.Centro)), ...sB.map(s => String(s.Centro))])].sort();
 
-        waterfallChartInstance = new Chart(wfCtx.getContext('2d'), {
-            type: 'bar',
-            data: {
-                labels: deltas.map(d => d.centro),
-                datasets: [{
-                    label: 'Δ Horas',
-                    data: deltas.map(d => d.delta.toFixed(1)),
-                    backgroundColor: deltas.map(d => d.delta > 0 ? 'rgba(255,77,77,0.7)' : 'rgba(76,209,55,0.7)'),
-                    borderColor: deltas.map(d => d.delta > 0 ? '#ff4d4d' : '#4cd137'),
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: { grid: { color: '#2d2d35' }, ticks: { color: '#a0a0a0' } },
-                    x: { grid: { display: false }, ticks: { color: '#a0a0a0', font: { size: 10 } } }
+    const valsA = labels.map(c => {
+        const item = sA.find(s => String(s.Centro) === c);
+        return item ? (item.Saturacion || 0) * 100 : 0;
+    });
+    const valsB = labels.map(c => {
+        const item = sB.find(s => String(s.Centro) === c);
+        return item ? (item.Saturacion || 0) * 100 : 0;
+    });
+
+    // Sort by delta descending
+    const indices = labels.map((_, i) => i).sort((a, b) => (valsB[b] - valsA[b]) - (valsB[a] - valsA[a]));
+    const sortedLabels = indices.map(i => labels[i]);
+    const sortedA = indices.map(i => valsA[i]);
+    const sortedB = indices.map(i => valsB[i]);
+
+    const ctx = document.getElementById('compareChart');
+    if (!ctx) return;
+    if (compareChartInstance) compareChartInstance.destroy();
+
+    compareChartInstance = new Chart(ctx.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: sortedLabels,
+            datasets: [
+                {
+                    label: comparisonData.nameA,
+                    data: sortedA,
+                    backgroundColor: 'rgba(100,100,100,0.4)',
+                    borderColor: '#666',
+                    borderWidth: 1,
+                    borderRadius: 4
                 },
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: (ctx) => `${parseFloat(ctx.raw) > 0 ? '+' : ''}${ctx.raw}h`
-                        }
+                {
+                    label: comparisonData.nameB,
+                    data: sortedB,
+                    backgroundColor: sortedB.map(v => v > 85 ? 'rgba(255,77,77,0.6)' : v > 60 ? 'rgba(245,166,35,0.5)' : 'rgba(76,209,55,0.5)'),
+                    borderColor: sortedB.map(v => v > 85 ? '#ff4d4d' : v > 60 ? '#f5a623' : '#4cd137'),
+                    borderWidth: 1,
+                    borderRadius: 4
+                }
+            ]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            onClick: (e, elements) => {
+                if (elements.length > 0) {
+                    const idx = elements[0].index;
+                    const centro = sortedLabels[idx];
+                    openDrillDown(centro);
+                }
+            },
+            onHover: (e, elements) => {
+                e.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
+            },
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    max: 120,
+                    grid: { color: 'rgba(255,255,255,0.04)' },
+                    ticks: { color: '#a0a0a0', callback: v => v + '%' }
+                },
+                y: {
+                    grid: { display: false },
+                    ticks: { color: '#a0a0a0', font: { size: 11, weight: '600' } }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top',
+                    labels: { color: '#a0a0a0', font: { size: 11 }, boxWidth: 12 }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => `${ctx.dataset.label}: ${ctx.raw.toFixed(1)}%`
                     }
                 }
             }
-        });
-    }
+        }
+    });
+}
 
-    // ===== 6. DECISION SEMAPHORE =====
-    const semEl = document.getElementById('semaphore-list');
-    if (semEl) {
-        const deltaSat = avgSatB - avgSatA;
-        const deltaOEE = oeeB - oeeA;
-        const deltaFTE = fteB - fteA;
-        const deltaHours = totalHoursB - totalHoursA;
-        const critCount = summaryB.filter(s => s.Saturacion > 0.85).length;
+function openDrillDown(centro) {
+    if (!comparisonData?.dataA || !comparisonData?.dataB) return;
+    const dA = comparisonData.dataA.detail || [];
+    const dB = comparisonData.dataB.detail || [];
+    const sA = comparisonData.dataA.summary || [];
+    const sB = comparisonData.dataB.summary || [];
 
-        const items = [
-            {
-                dot: deltaSat > 5 ? 'red' : deltaSat > 2 ? 'yellow' : 'green',
-                text: 'Saturación Media',
-                value: `${deltaSat > 0 ? '+' : ''}${deltaSat.toFixed(1)}%`,
-                valueColor: deltaSat > 5 ? '#ff4d4d' : deltaSat > 2 ? '#f5a623' : '#4cd137'
-            },
-            {
-                dot: deltaOEE < -2 ? 'red' : deltaOEE < 0 ? 'yellow' : 'green',
-                text: 'Eficiencia OEE',
-                value: `${deltaOEE > 0 ? '+' : ''}${deltaOEE.toFixed(1)}%`,
-                valueColor: deltaOEE < -2 ? '#ff4d4d' : deltaOEE < 0 ? '#f5a623' : '#4cd137'
-            },
-            {
-                dot: deltaFTE > 5 ? 'red' : deltaFTE > 1 ? 'yellow' : 'green',
-                text: 'Personal (FTE)',
-                value: `${deltaFTE > 0 ? '+' : ''}${deltaFTE.toFixed(1)} personas`,
-                valueColor: deltaFTE > 5 ? '#ff4d4d' : deltaFTE > 1 ? '#f5a623' : '#4cd137'
-            },
-            {
-                dot: deltaHours > 100 ? 'red' : deltaHours > 10 ? 'yellow' : 'green',
-                text: 'Carga Total',
-                value: `${deltaHours > 0 ? '+' : ''}${deltaHours.toFixed(0)}h`,
-                valueColor: deltaHours > 100 ? '#ff4d4d' : deltaHours > 10 ? '#f5a623' : '#4cd137'
-            },
-            {
-                dot: critCount > 3 ? 'red' : critCount > 0 ? 'yellow' : 'green',
-                text: 'Centros Críticos (>85%)',
-                value: `${critCount} centros`,
-                valueColor: critCount > 3 ? '#ff4d4d' : critCount > 0 ? '#f5a623' : '#4cd137'
-            }
-        ];
+    const artsA = dA.filter(d => String(d.Centro) === String(centro));
+    const artsB = dB.filter(d => String(d.Centro) === String(centro));
+    const centroSatA = sA.find(s => String(s.Centro) === String(centro));
+    const centroSatB = sB.find(s => String(s.Centro) === String(centro));
 
-        semEl.innerHTML = items.map(item => `
-            <div class="semaphore-item">
-                <div class="semaphore-dot ${item.dot}"></div>
-                <div class="semaphore-text">${item.text}</div>
-                <div class="semaphore-value" style="color:${item.valueColor}">${item.value}</div>
+    const satA = centroSatA ? (centroSatA.Saturacion * 100).toFixed(1) : '0.0';
+    const satB = centroSatB ? (centroSatB.Saturacion * 100).toFixed(1) : '0.0';
+    const hoursA = artsA.reduce((a, d) => a + (d['Horas_Totales'] || 0), 0);
+    const hoursB = artsB.reduce((a, d) => a + (d['Horas_Totales'] || 0), 0);
+    const countA = artsA.length;
+    const countB = artsB.length;
+
+    // Get articles in B with their deltas
+    const allArts = [...new Set([...artsA.map(a => a.Articulo), ...artsB.map(a => a.Articulo)])];
+    const rows = allArts.map(art => {
+        const a = artsA.find(d => d.Articulo === art) || {};
+        const b = artsB.find(d => d.Articulo === art) || {};
+        const demB = b['Demanda_Neta'] || b['Demanda'] || 0;
+        const hrsB = b['Horas_Totales'] || 0;
+        const hrsA = a['Horas_Totales'] || 0;
+        const deltaHrs = hrsB - hrsA;
+        return { art, demB, hrsB, deltaHrs };
+    }).sort((a, b) => Math.abs(b.deltaHrs) - Math.abs(a.deltaHrs));
+
+    const body = document.getElementById('compare-body');
+    if (!body) return;
+    body.classList.remove('no-drill');
+    body.innerHTML = `
+        <div class="chart-panel">
+            <div class="panel-title">Saturación por Centro — Base vs Escenario</div>
+            <div class="chart-wrap"><canvas id="compareChart"></canvas></div>
+        </div>
+        <div class="drilldown-panel">
+            <div class="drill-header">
+                <div class="drill-title">📋 Centro ${centro}</div>
+                <button class="drill-back" onclick="closeDrillDown()">← Volver</button>
             </div>
-        `).join('');
-    }
-
-    // ===== 7. SMART RECOMMENDATIONS =====
-    const recEl = document.getElementById('recommendation-container');
-    if (recEl) {
-        const recommendations = [];
-        const criticalCenters = summaryB.filter(s => s.Saturacion > 0.85).map(s => String(s.Centro));
-        const freeCenters = summaryB.filter(s => s.Saturacion < 0.5).map(s => String(s.Centro));
-
-        if (criticalCenters.length > 0 && freeCenters.length > 0) {
-            recommendations.push(`Redistribuir carga de centros saturados (${criticalCenters.slice(0, 2).join(', ')}) hacia centros con capacidad libre (${freeCenters.slice(0, 2).join(', ')}).`);
-        }
-        if (criticalCenters.length > 0 && freeCenters.length === 0) {
-            recommendations.push(`⚠️ ${criticalCenters.length} centros en estado crítico sin alternativa libre. Considerar turno adicional o subcontratación.`);
-        }
-        if (oeeB < oeeA && (oeeA - oeeB) > 2) {
-            recommendations.push(`El OEE ha caído ${(oeeA - oeeB).toFixed(1)}%. Revisar cambios en cadencias o condiciones de máquina antes de aplicar este escenario.`);
-        }
-        if ((fteB - fteA) > 3) {
-            recommendations.push(`Se necesitan +${(fteB - fteA).toFixed(0)} operarios (FTE). Solicitar provisión al dept. de RRHH con ${Math.ceil((fteB - fteA) * 1.1)} posiciones netas (10% rotación).`);
-        }
-        if (recommendations.length === 0) {
-            recommendations.push('El escenario es viable sin cambios estructurales. Proceder con la planificación estándar.');
-        }
-
-        recEl.innerHTML = `
-            <div class="recommendation-box">
-                <div class="rec-title">💡 Recomendación del Sistema</div>
-                <div class="rec-text">${recommendations.join('<br><br>')}</div>
+            <div class="drill-kpis">
+                <div class="drill-kpi">
+                    <div class="dk-val">${satB}%</div>
+                    <div class="dk-label">Saturación</div>
+                </div>
+                <div class="drill-kpi">
+                    <div class="dk-val">${hoursB.toFixed(0)}h</div>
+                    <div class="dk-label">Carga</div>
+                </div>
+                <div class="drill-kpi">
+                    <div class="dk-val">${countB}</div>
+                    <div class="dk-label">Artículos</div>
+                </div>
             </div>
-        `;
+            <div style="max-height: 200px; overflow-y: auto;">
+                <table class="drill-table">
+                    <thead><tr>
+                        <th>Artículo</th>
+                        <th>Demanda</th>
+                        <th>Horas</th>
+                        <th>Δ Horas</th>
+                    </tr></thead>
+                    <tbody>
+                        ${rows.slice(0, 20).map(r => {
+        const deltaColor = r.deltaHrs > 0.1 ? '#ff4d4d' : r.deltaHrs < -0.1 ? '#4cd137' : 'var(--text-muted)';
+        const deltaSign = r.deltaHrs > 0 ? '+' : '';
+        return `<tr>
+                                <td style="font-weight:600">${r.art}</td>
+                                <td>${r.demB.toLocaleString('es-ES')}</td>
+                                <td>${r.hrsB.toFixed(1)}</td>
+                                <td style="color:${deltaColor}; font-weight:700">${deltaSign}${r.deltaHrs.toFixed(1)}</td>
+                            </tr>`;
+    }).join('')}
+                    </tbody>
+                </table>
+            </div>
+            ${rows.length > 20 ? `<div style="font-size:0.7rem; color:var(--text-muted); margin-top:6px; text-align:center">Mostrando top 20 de ${rows.length} artículos</div>` : ''}
+        </div>
+    `;
+    renderCompareChart();
+}
+
+function closeDrillDown() {
+    const body = document.getElementById('compare-body');
+    if (!body) return;
+    body.classList.add('no-drill');
+    body.innerHTML = `
+        <div class="chart-panel">
+            <div class="panel-title">Saturación por Centro — Base vs Escenario</div>
+            <div class="chart-wrap"><canvas id="compareChart"></canvas></div>
+        </div>
+    `;
+    renderCompareChart();
+}
+
+function renderImpactAnalysis() {
+    if (!comparisonData?.dataA || !comparisonData?.dataB) return;
+    const sA = comparisonData.dataA.summary || [];
+    const sB = comparisonData.dataB.summary || [];
+    const dA = comparisonData.dataA.detail || [];
+    const dB = comparisonData.dataB.detail || [];
+    const daysA = comparisonData.dataA.meta?.dias_laborales || 238;
+    const daysB = comparisonData.dataB.meta?.dias_laborales || 238;
+
+    const avgSatA = sA.length ? (sA.reduce((a, s) => a + (s.Saturacion || 0), 0) / sA.length) * 100 : 0;
+    const avgSatB = sB.length ? (sB.reduce((a, s) => a + (s.Saturacion || 0), 0) / sB.length) * 100 : 0;
+    const oeeA = dA.length ? (dA.reduce((a, d) => a + (d['%OEE'] || 0), 0) / dA.length) * 100 : 0;
+    const oeeB = dB.length ? (dB.reduce((a, d) => a + (d['%OEE'] || 0), 0) / dB.length) * 100 : 0;
+    const hoursA = dA.reduce((a, d) => a + (d['Horas_Totales'] || 0), 0);
+    const hoursB = dB.reduce((a, d) => a + (d['Horas_Totales'] || 0), 0);
+    const hhA = dA.reduce((a, d) => a + (d.Horas_Hombre || 0), 0);
+    const hhB = dB.reduce((a, d) => a + (d.Horas_Hombre || 0), 0);
+    const fteA = hhA / (daysA * 8);
+    const fteB = hhB / (daysB * 8);
+
+    const deltaSat = avgSatB - avgSatA;
+    const deltaOEE = oeeB - oeeA;
+    const deltaHours = hoursB - hoursA;
+    const deltaFTE = fteB - fteA;
+    const critCount = sB.filter(s => s.Saturacion > 0.85).length;
+
+    const signals = [
+        {
+            dot: deltaSat > 5 ? 'red' : deltaSat > 2 ? 'yellow' : 'green',
+            text: 'Saturación media',
+            val: (deltaSat > 0 ? '+' : '') + deltaSat.toFixed(1) + '%',
+            color: deltaSat > 5 ? '#ff4d4d' : deltaSat > 2 ? '#f5a623' : '#4cd137'
+        },
+        {
+            dot: deltaOEE < -2 ? 'red' : deltaOEE < 0 ? 'yellow' : 'green',
+            text: 'Eficiencia OEE',
+            val: (deltaOEE > 0 ? '+' : '') + deltaOEE.toFixed(1) + '%',
+            color: deltaOEE < -2 ? '#ff4d4d' : deltaOEE < 0 ? '#f5a623' : '#4cd137'
+        },
+        {
+            dot: deltaHours > 100 ? 'red' : deltaHours > 10 ? 'yellow' : 'green',
+            text: 'Carga total',
+            val: (deltaHours > 0 ? '+' : '') + deltaHours.toFixed(0) + 'h',
+            color: deltaHours > 100 ? '#ff4d4d' : deltaHours > 10 ? '#f5a623' : '#4cd137'
+        },
+        {
+            dot: critCount > 3 ? 'red' : critCount > 0 ? 'yellow' : 'green',
+            text: 'Centros críticos (>85%)',
+            val: critCount + ' centros',
+            color: critCount > 3 ? '#ff4d4d' : critCount > 0 ? '#f5a623' : '#4cd137'
+        }
+    ];
+
+    // Smart recommendations
+    const recs = [];
+    const critCenters = sB.filter(s => s.Saturacion > 0.85).map(s => String(s.Centro));
+    const freeCenters = sB.filter(s => s.Saturacion < 0.5).map(s => String(s.Centro));
+
+    if (critCenters.length > 0 && freeCenters.length > 0) {
+        recs.push(`Redistribuir carga de centros saturados (<strong>${critCenters.slice(0, 3).join(', ')}</strong>) hacia centros con capacidad libre (<strong>${freeCenters.slice(0, 3).join(', ')}</strong>).`);
+    } else if (critCenters.length > 0) {
+        recs.push(`⚠️ ${critCenters.length} centros en estado crítico sin alternativa libre. Considerar turno adicional o subcontratación.`);
     }
+    if (oeeB < oeeA && (oeeA - oeeB) > 2) {
+        recs.push(`OEE ha caído <strong>${(oeeA - oeeB).toFixed(1)}%</strong>. Revisar cadencias y condiciones de máquina.`);
+    }
+    if (deltaFTE > 3) {
+        recs.push(`Se necesitan <strong>+${deltaFTE.toFixed(0)} FTE</strong>. Solicitar provisión RRHH (${Math.ceil(deltaFTE * 1.1)} posiciones netas, 10% rotación).`);
+    }
+    if (recs.length === 0) {
+        recs.push('Escenario viable sin cambios estructurales. Proceder con planificación estándar.');
+    }
+
+    const bar = document.getElementById('impact-bar');
+    if (!bar) return;
+    bar.innerHTML = `
+        <div>
+            <div class="panel-title">Señales de Impacto</div>
+            <div class="impact-signals">
+                ${signals.map(s => `
+                    <div class="signal-item">
+                        <div class="signal-dot ${s.dot}"></div>
+                        <div class="signal-text">${s.text}</div>
+                        <div class="signal-val" style="color:${s.color}">${s.val}</div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+        <div>
+            <div class="panel-title">💡 Recomendación</div>
+            <div class="rec-box">
+                <div class="rec-text">${recs.join('<br><br>')}</div>
+            </div>
+        </div>
+    `;
 }
 
 function exitComparisonMode() {
     isComparisonMode = false;
     document.getElementById('comparison-controls').style.display = 'none';
 
-    // Destroy KPI chart instances
-    if (radarChartInstance) { radarChartInstance.destroy(); radarChartInstance = null; }
-    if (waterfallChartInstance) { waterfallChartInstance.destroy(); waterfallChartInstance = null; }
+    if (compareChartInstance) { compareChartInstance.destroy(); compareChartInstance = null; }
 
-    // Restore control bar
     const controlBar = document.querySelector('.control-bar');
     if (controlBar) controlBar.style.display = 'flex';
 
-    // Restore standard Grid (check both old and new class names)
-    const dashboardGrid = document.querySelector('.bento-pro') || document.querySelector('.bento-grid');
+    const dashboardGrid = document.querySelector('.compare-layout') || document.querySelector('.bento-pro') || document.querySelector('.bento-grid');
     if (dashboardGrid) {
         dashboardGrid.className = 'dashboard-grid';
         dashboardGrid.innerHTML = `
@@ -1294,205 +1324,12 @@ function exitComparisonMode() {
         `;
     }
 
-    // Restore table
     const tableCard = document.querySelector('.table-card');
-    if (tableCard) tableCard.classList.remove('glass-table');
+    if (tableCard) {
+        tableCard.style.display = '';
+        tableCard.classList.remove('glass-table');
+    }
 
     if (currentScenarioId) updateNavItemActive(currentScenarioId);
     updateUI();
-}
-
-function renderComparisonDashboard() {
-    const ctx = document.getElementById('saturationChart').getContext('2d');
-    if (chartInstance) chartInstance.destroy();
-
-    const summaryA = (comparisonData.dataA.summary || []);
-    const summaryB = (comparisonData.dataB.summary || []);
-
-    const centersA = summaryA.map(s => String(s.Centro));
-    const centersB = summaryB.map(s => String(s.Centro));
-    const labels = [...new Set([...centersA, ...centersB])].sort();
-
-    const dataA_Abs = labels.map(label => {
-        const item = summaryA.find(s => String(s.Centro) === label);
-        return item ? (item.Saturacion * 100).toFixed(1) : "0.0";
-    });
-    const dataB_Abs = labels.map(label => {
-        const item = summaryB.find(s => String(s.Centro) === label);
-        return item ? (item.Saturacion * 100).toFixed(1) : "0.0";
-    });
-
-    const deltaData = labels.map((centro, i) => {
-        const valA = parseFloat(dataA_Abs[i]);
-        const valB = parseFloat(dataB_Abs[i]);
-        return (valB - valA).toFixed(1);
-    });
-
-    const isDelta = comparisonViewMode === 'delta';
-    const mainDataset = isDelta ? {
-        label: `Variación (%)`,
-        data: deltaData,
-        backgroundColor: deltaData.map(d => parseFloat(d) > 0 ? '#ff4d4d' : '#4cd137'),
-        borderColor: deltaData.map(d => Math.abs(parseFloat(d)) > 10 ? '#fff' : 'transparent'),
-        borderWidth: deltaData.map(d => Math.abs(parseFloat(d)) > 10 ? 1 : 0)
-    } : {
-        label: comparisonData.nameB,
-        data: dataB_Abs,
-        backgroundColor: dataB_Abs.map(val => parseFloat(val) > 90 ? '#ff4d4d' : '#E30613'),
-        borderColor: dataB_Abs.map(val => parseFloat(val) > 90 ? '#ffffff' : 'transparent'),
-        borderWidth: dataB_Abs.map(val => parseFloat(val) > 90 ? 2 : 0)
-    };
-
-    chartInstance = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: isDelta ? [mainDataset] : [
-                {
-                    label: comparisonData.nameA,
-                    data: dataA_Abs,
-                    backgroundColor: '#444'
-                },
-                mainDataset
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    grid: { color: '#2d2d35' },
-                    ticks: { color: '#a0a0a0' },
-                    max: Math.max(100, ...dataA_Abs, ...dataB_Abs) + 10
-                },
-                x: { grid: { display: false }, ticks: { color: '#a0a0a0' } }
-            },
-            plugins: {
-                legend: {
-                    labels: { color: '#fff' }
-                }
-            }
-        }
-    });
-
-    // Only render standard summary if container exists
-    if (document.getElementById('summary-stats')) {
-        renderComparisonSummary();
-    }
-}
-
-function renderComparisonSummary() {
-    const container = document.getElementById('summary-stats');
-    if (!container) return; // Silent return if not in standard mode
-
-    const avgA = (comparisonData.dataA.summary.reduce((acc, s) => acc + s.Saturacion, 0) / comparisonData.dataA.summary.length * 100).toFixed(1);
-    const avgB = (comparisonData.dataB.summary.reduce((acc, s) => acc + s.Saturacion, 0) / comparisonData.dataB.summary.length * 100).toFixed(1);
-
-    const delta = (avgB - avgA).toFixed(1);
-    const deltaClass = delta > 0 ? 'delta-up' : (delta < 0 ? 'delta-down' : 'delta-neutral');
-    const deltaIcon = delta > 0 ? '▲' : (delta < 0 ? '▼' : '●');
-    const deltaText = delta == 0 ? 'Sin cambios' : `${Math.abs(delta)}% ${delta > 0 ? 'incremento' : 'reducción'}`;
-
-    container.innerHTML = `
-        <div class="stat-item" style="border-left-color: #666">
-            <div class="stat-val">${avgA}%</div>
-            <div class="stat-label">Saturación Media</div>
-            <div style="font-size: 0.7rem; color: var(--text-muted); font-weight: 700; margin-top: 5px; text-transform: uppercase; letter-spacing: 0.05em;">
-                ${comparisonData.nameA}
-            </div>
-        </div>
-        <div class="stat-item" style="border-left-color: var(--rpk-red)">
-            <div class="stat-val">${avgB}%</div>
-            <div class="stat-label">Saturación Media</div>
-            <div style="font-size: 0.7rem; color: var(--rpk-red); font-weight: 700; margin-top: 5px; text-transform: uppercase; letter-spacing: 0.05em;">
-                ${comparisonData.nameB}
-            </div>
-            <div class="delta-badge ${deltaClass}">
-                ${deltaIcon} ${deltaText}
-            </div>
-        </div>
-    `;
-}
-
-function renderComparisonTable() {
-    const body = document.getElementById('table-body');
-    if (!body) return;
-    const search = document.getElementById('table-search').value.toLowerCase();
-
-    // We compare B against A
-    const detailA = comparisonData.dataA.detail;
-    const detailB = comparisonData.dataB.detail;
-
-    let filtered = detailB;
-    if (search) filtered = filtered.filter(d => d.Articulo.toString().toLowerCase().includes(search));
-
-    body.innerHTML = filtered.slice(0, 100).map(dB => {
-        // Find matching item in A by Article AND centro_original
-        const dA = detailA.find(item => item.Articulo == dB.Articulo && (item.centro_original == dB.centro_original || item.Centro == dB.centro_original)) || {};
-
-        const sat = (dB.Saturacion * 100).toFixed(1);
-        const satClass = sat > 85 ? 'pill-high' : (sat > 70 ? 'pill-mid' : 'pill-low');
-
-        const hasDiffOEE = Math.abs((dB['%OEE'] || 0) - (dA['%OEE'] || 0)) > 0.001;
-        const hasDiffPPM = Math.abs((dB['Piezas por minuto'] || 0) - (dA['Piezas por minuto'] || 0)) > 0.1;
-        const hasDiffDem = Math.abs((dB['Volumen anual'] || 0) - (dA['Volumen anual'] || 0)) > 1;
-        const hasDiffCen = (dB['Centro'] !== dA['Centro']);
-        const hasDiffShifts = (dB['horas_turno'] !== dA['horas_turno']);
-        const hasDiffSetup = Math.abs((dB['Setup (h)'] || 0) - (dA['Setup (h)'] || 0)) > 0.01;
-
-        const anyDiff = hasDiffOEE || hasDiffPPM || hasDiffDem || hasDiffCen || hasDiffShifts || hasDiffSetup;
-
-        return `
-            <tr class="${anyDiff ? 'row-changed' : ''}">
-                <td><strong>${dB.Articulo}</strong></td>
-                <td class="text-center">
-                    <span class="center-tag ${hasDiffCen ? 'val-changed font-bold' : ''}">${dB.Centro}</span>
-                    <div style="font-size: 0.7rem; color: ${hasDiffShifts ? 'var(--rpk-red)' : 'var(--text-muted)'}; margin-top: 4px;">
-                        ${dB.horas_turno}h ${hasDiffShifts ? `(vs ${dA.horas_turno || 0}h)` : ''}
-                    </div>
-                </td>
-                <td class="text-right ${hasDiffDem ? 'val-changed font-bold' : ''}">${dB['Volumen anual']?.toLocaleString() || 0}</td>
-                <td class="text-right ${hasDiffPPM ? 'val-changed font-bold' : ''}">${Math.round(dB['Piezas por minuto'] || 0)}</td>
-                <td class="text-right ${hasDiffOEE ? 'val-changed font-bold' : ''}">${((dB['%OEE'] || 0) * 100).toFixed(1)}%</td>
-                <td class="text-center">
-                    <span class="saturation-pill ${satClass}">${sat}%</span>
-                    <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 4px;">
-                        ${(dB.Horas_Totales || 0).toFixed(1)}h
-                    </div>
-                </td>
-                <td class="text-right">${(dB.Ratio_MOD || 1.0).toFixed(2)}</td>
-                <td class="text-right">${((dB.Impacto || 0) * 100).toFixed(1)}%</td>
-                <td class="text-center">
-                    <button class="secondary-btn btn-simular" 
-                        style="padding: 0.3rem 0.6rem; font-size: 0.7rem;"
-                        data-articulo="${dB.Articulo}" 
-                        data-centro="${dB.Centro}">Ajustar</button>
-                </td>
-            </tr>
-        `;
-    }).join('');
-}
-
-function toggleComparisonView() {
-    comparisonViewMode = (comparisonViewMode === 'delta') ? 'absolute' : 'delta';
-    const btn = document.getElementById('btn-toggle-delta');
-    if (btn) {
-        btn.innerText = (comparisonViewMode === 'delta') ? 'Ver Valores Absolutos' : 'Ver Variación (%)';
-    }
-    renderComparisonDashboard();
-}
-
-// Add simple micro-animation trigger
-function triggerDashboardAnimation() {
-    const items = document.querySelectorAll('.bento-item');
-    items.forEach((item, i) => {
-        item.style.opacity = '0';
-        item.style.transform = 'translateY(20px)';
-        item.style.transition = `all 0.5s ease ${i * 0.1}s`;
-        setTimeout(() => {
-            item.style.opacity = '1';
-            item.style.transform = 'translateY(0)';
-        }, 10);
-    });
 }
