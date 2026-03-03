@@ -1242,16 +1242,16 @@ function openDrillDown(centro) {
                     <tr>
                         <td style="font-weight:600">${r.Articulo}</td>
                         <td style="display:flex;flex-direction:column;gap:3px">
-                            <input title="Setup (Hrs)" type="number" class="dark-input" style="width:36px; padding:2px; font-size:0.7rem;" value="${(r.Setup || 0)}" onblur="applyCompareEdit('${r.Articulo}','Setup', this.value)">
-                            <select title="Traslado" class="dark-input" style="width:36px; padding:2px; font-size:0.7rem;" onchange="applyCompareEdit('${r.Articulo}','Requiere_Traslado', this.value)">
+                            <input title="Setup (Hrs)" type="number" class="dark-input table-small-input" style="width:45px;" value="${(r.Setup || 0)}" onblur="applyCompareEdit('${r.Articulo}','Setup', this.value)">
+                            <select title="Traslado" class="dark-input table-small-input" style="width:45px;" onchange="applyCompareEdit('${r.Articulo}','Requiere_Traslado', this.value)">
                                 <option value="1" ${r.Requiere_Traslado ? 'selected' : ''}>Si</option>
                                 <option value="0" ${!r.Requiere_Traslado ? 'selected' : ''}>No</option>
                             </select>
                         </td>
-                        <td><input type="number" class="dark-input" style="width:55px; padding:2px; font-size:0.7rem;" value="${Math.round(r.Demanda_Neta || r.Demanda || 0)}" onblur="applyCompareEdit('${r.Articulo}', 'Demanda', this.value)"></td>
-                        <td><input type="number" class="dark-input" style="width:40px; padding:2px; font-size:0.7rem;" value="${(r['%OEE'] * 100).toFixed(1)}" onblur="applyCompareEdit('${r.Articulo}', 'OEE', this.value)"></td>
-                        <td><input type="number" class="dark-input" style="width:32px; padding:2px; font-size:0.7rem;" value="${(r.Ratio_Personas_Maquina || 1.0)}" onblur="applyCompareEdit('${r.Articulo}', 'Ratio_Personas_Maquina', this.value)"></td>
-                        <td><input type="number" class="dark-input" style="width:44px; padding:2px; font-size:0.7rem;" value="${r.PPM || 0}" onblur="applyCompareEdit('${r.Articulo}', 'PPM', this.value)"></td>
+                        <td><input type="number" class="dark-input table-small-input" style="width:65px;" value="${Math.round(r.Demanda_Neta || r.Demanda || 0)}" onblur="applyCompareEdit('${r.Articulo}', 'Demanda', this.value)"></td>
+                        <td><input type="number" class="dark-input table-small-input" style="width:50px;" value="${(r['%OEE'] * 100).toFixed(1)}" onblur="applyCompareEdit('${r.Articulo}', 'OEE', this.value)"></td>
+                        <td><input type="number" class="dark-input table-small-input" style="width:40px;" value="${(r.Ratio_Personas_Maquina || 1.0)}" onblur="applyCompareEdit('${r.Articulo}', 'Ratio_Personas_Maquina', this.value)"></td>
+                        <td><input type="number" class="dark-input table-small-input" style="width:50px;" value="${r.PPM || 0}" onblur="applyCompareEdit('${r.Articulo}', 'PPM', this.value)"></td>
                     </tr>
                 `).join('')}
             </tbody>

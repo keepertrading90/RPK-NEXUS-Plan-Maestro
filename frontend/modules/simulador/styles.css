@@ -1369,7 +1369,7 @@ body.compare-mode .main-layout {
     flex-wrap: nowrap;
     gap: 15px;
     min-height: 300px;
-    align-items: stretch;
+    align-items: flex-start;
 }
 
 .compare-body .chart-panel {
@@ -1478,45 +1478,49 @@ body.compare-mode .main-layout {
 
 .drill-table {
     width: 100%;
-    border-collapse: collapse;
-    font-size: 0.75rem;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.8rem;
 }
 
 .drill-table th {
     text-align: left;
-    font-size: 0.55rem;
+    font-size: 0.65rem;
     font-weight: 700;
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.8px;
-    padding: 5px 6px;
-    border-bottom: 1px solid var(--border-color);
+    padding: 8px 6px;
+    border-bottom: 2px solid rgba(227, 6, 19, 0.4);
 }
 
 .drill-table td {
-    padding: 5px 6px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    padding: 8px 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     color: var(--text-main);
+    vertical-align: middle;
 }
 
 .drill-table tr:hover td {
-    background: rgba(255, 255, 255, 0.02);
+    background: rgba(255, 255, 255, 0.03);
 }
 
-.drill-table .edit-btn {
-    background: transparent;
-    border: 1px solid var(--border-color);
-    color: var(--text-muted);
-    padding: 2px 6px;
+/* Modificadores para Inputs pequeños en tablas */
+.table-small-input {
+    background: var(--dark-surface-2);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: white;
+    padding: 4px 6px;
+    font-size: 0.75rem;
     border-radius: 4px;
-    font-size: 0.65rem;
-    cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    outline: none;
 }
 
-.drill-table .edit-btn:hover {
-    color: var(--rpk-red);
+.table-small-input:focus {
     border-color: var(--rpk-red);
+    background: rgba(26, 26, 32, 0.8);
+    box-shadow: 0 0 0 2px rgba(227, 6, 19, 0.15);
 }
 
 /* Row 4: Recommendations */
