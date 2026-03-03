@@ -615,11 +615,19 @@ function updateDropdownText() {
 function setupEventListeners() {
     document.getElementById('table-body').onclick = (e) => {
         if (e.target.classList.contains('btn-simular')) {
+            if (isComparisonMode) {
+                alert("Para simular nuevos datos, debes salir del modo comparativa.");
+                return;
+            }
             openEditModal(e.target.getAttribute('data-articulo'), e.target.getAttribute('data-centro'));
         }
     };
 
     document.getElementById('btn-base').onclick = () => {
+        if (isComparisonMode) {
+            alert("Debes salir del Modo Comparativa antes de cambiar de pestaña.");
+            return;
+        }
         isModeActual = false;
         localOverrides = [];
         centerConfigs = {};
@@ -630,6 +638,10 @@ function setupEventListeners() {
     const btnActual = document.getElementById('btn-actual');
     if (btnActual) {
         btnActual.onclick = () => {
+            if (isComparisonMode) {
+                alert("Debes salir del Modo Comparativa antes de cambiar de pestaña.");
+                return;
+            }
             isModeActual = true;
             localOverrides = [];
             centerConfigs = {};
@@ -732,6 +744,10 @@ function setupEventListeners() {
     };
 
     document.getElementById('btn-new').onclick = () => {
+        if (isComparisonMode) {
+            alert("Debes salir del Modo Comparativa antes de crear un escenario.");
+            return;
+        }
         const modal = document.getElementById('save-modal');
         const overwriteSection = document.getElementById('overwrite-section');
         const nameInput = document.getElementById('new-scenario-name');
@@ -768,7 +784,13 @@ function setupEventListeners() {
         document.getElementById('save-modal').style.display = 'none';
     };
 
-    document.getElementById('btn-compare').onclick = () => document.getElementById('compare-modal').style.display = 'flex';
+    document.getElementById('btn-compare').onclick = () => {
+        if (isComparisonMode) {
+            alert("Ya estás en Modo Comparativa. Para iniciar una nueva, sal primero.");
+            return;
+        }
+        document.getElementById('compare-modal').style.display = 'flex';
+    };
     document.getElementById('run-compare').onclick = runCompare;
     document.getElementById('btn-exit-compare').onclick = exitComparisonMode;
     document.getElementById('btn-toggle-delta').onclick = () => {
@@ -776,7 +798,14 @@ function setupEventListeners() {
         document.getElementById('btn-toggle-delta').innerText = (comparisonViewMode === 'absolute' ? 'Ver Variación (%)' : 'Ver Valores Absolutos');
         renderComparisonDashboard();
     };
-    document.getElementById('btn-manage').onclick = () => { renderManageList(); document.getElementById('manage-modal').style.display = 'flex'; };
+    document.getElementById('btn-manage').onclick = () => {
+        if (isComparisonMode) {
+            alert("Debes salir del Modo Comparativa antes de ir a Gestionar.");
+            return;
+        }
+        renderManageList();
+        document.getElementById('manage-modal').style.display = 'flex';
+    };
 
     const closeHandlers = document.querySelectorAll('.close, .close-manage');
     closeHandlers.forEach(btn => {
