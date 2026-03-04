@@ -379,9 +379,7 @@ body {
    ========================================= */
 .center-panel {
     flex: 1;
-    min-width: 0;
     overflow-y: auto;
-    overflow-x: hidden;
     padding: 1.5rem;
     background: radial-gradient(circle at top center, rgba(227, 6, 19, 0.05), transparent 600px);
 }
@@ -390,46 +388,25 @@ body {
 .control-bar {
     display: flex;
     background: var(--dark-surface);
-    padding: 1rem 1.2rem;
+    padding: 0.8rem 1.2rem;
     border-radius: 8px;
     align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
+    gap: 1.5rem;
     border: 1px solid var(--border-color);
     margin-bottom: 1.5rem;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-
-    /* Garantías absolutas de Layout vs Paneles Laterales */
-    width: 100%;
-    box-sizing: border-box;
-    flex-wrap: nowrap;
-    /* Tienen que entrar todas inline, hay espacio de sobra */
-    overflow: hidden;
-    /* Corta cualquier cosa que se salga antes de chocar con sidebars */
-}
-
-.filters-container {
-    display: flex;
-    flex-wrap: nowrap;
-    /* Forzar en 1 línea */
-    align-items: flex-end;
-    /* Alinear a la base (inputs/botones) */
-    gap: 1rem;
+    box-shadow: var(--shadow);
 }
 
 .control-group {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.3rem;
+    align-items: center;
+    gap: 0.8rem;
 }
 
 .control-group label {
-    font-size: 0.7rem;
+    font-size: 0.8rem;
     font-weight: 600;
     color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
     white-space: nowrap;
 }
 
@@ -666,57 +643,33 @@ body {
     opacity: 0.8;
 }
 
-.control-actions.inline-actions {
+.control-actions.spacer {
+    margin-left: auto;
+}
+
+.action-buttons {
     display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: 0.5rem;
-    /* Ajuste de altura exacto para cuadrar con los inputs de arriba */
-    height: 31px;
+    flex-direction: column;
+    gap: 4px;
 }
 
-.control-actions.inline-actions .action-btn {
-    padding: 0 1rem;
-    height: 100%;
-    font-size: 0.8rem;
-    display: inline-flex;
-    align-items: center;
-    border-radius: 4px;
+.action-buttons .action-btn {
+    padding: 0.3rem 1rem;
+    font-size: 0.75rem;
 }
 
-.scenario-current-display.new-layout {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    background: rgba(227, 6, 19, 0.08);
-    /* Acento premium RPK */
-    padding: 0.5rem 1rem;
-    border-radius: 6px;
-    border: 1px solid rgba(227, 6, 19, 0.2);
-    gap: 1rem;
-    white-space: nowrap;
-    /* No pushear margin-left: auto si usamos space-between en parent */
-}
-
-.scenario-text-wrapper {
+.scenario-current-display {
     display: flex;
     flex-direction: column;
     justify-content: center;
-    text-align: right;
-}
-
-.scenario-label {
-    font-size: 0.7rem;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    font-weight: 600;
-    margin-bottom: 2px;
+    padding-left: 1rem;
+    border-left: 2px solid var(--rpk-red);
+    height: 100%;
 }
 
 #current-scenario-name {
-    color: var(--rpk-red);
-    font-size: 1.2rem;
+    color: white;
+    font-size: 1.1rem;
     font-weight: 800;
 }
 

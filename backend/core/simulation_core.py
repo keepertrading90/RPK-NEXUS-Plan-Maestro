@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 
 # Configuración de rutas para RPK NEXUS
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-EXCEL_PATH = os.path.join(BASE_DIR, "MAESTRO FLEJE_v1.xlsx")
+EXCEL_PATH = os.path.join(BASE_DIR, "db", "MAESTRO FLEJE_v1.xlsx")
 
 try:
     from backend.db import models_sim as database
@@ -419,10 +419,25 @@ def add_article_to_excel(data: Dict) -> Dict:
     # Crear backup
     _create_backup()
 
-    # Escribir nueva fila con openpyxl
+    # Escribir nueva fila con openpyxl (respetando las 13 columnas del Maestro actual)
     wb = openpyxl.load_workbook(EXCEL_PATH)
     ws = wb.active
-    new_row = [dias_lab, articulo, float(centro), vol_anual, ppm, pph, ppd_16, ppd_24, ppd_oee_24, ppd_oee_16, pps_24, pps_16, oee]
+    # Orden Maestro: [0] Dias, [1] Articulo, [2] Centro, [3] Volumen, [4] ppm, [5] pph, [6] ppd16, [7] ppd24, [8] ppdOEE24, [9] ppdOEE16, [10] pps24, [11] pps16, [12] OEE
+    new_row = [
+        dias_lab, 
+        articulo, 
+        float(centro), 
+        vol_anual, 
+        ppm, 
+        pph, 
+        ppd_16, 
+        ppd_24, 
+        ppd_oee_24, 
+        ppd_oee_16, 
+        pps_24, 
+        pps_16, 
+        oee
+    ]
     ws.append(new_row)
     wb.save(EXCEL_PATH)
     wb.close()
@@ -467,12 +482,18 @@ def delete_article_from_excel(articulo: str, centro: str) -> Dict:
     ws = wb.active
 
     # Borrar todo el contenido excepto cabecera
-    for row in range(ws.max_row, 1, -1):
-        ws.delete_rows(row)
+    if ws.max_row > 1:
+        ws.delete_rows(2, ws.max_row - 1)
 
-    # Reescribir filas desde el DataFrame limpio
+    # Convertir DF a lista de listas asegurando tipos de datos para Excel
+    # El DF original tiene las columnas en el orden correcto
     for _, row_data in df_cleaned.iterrows():
-        ws.append(row_data.tolist())
+        # Aseguramos que los tipos sean nativos de Python para openpyxl
+        clean_row = []
+        for val in row_data.tolist():
+            if pd.isna(val): clean_row.append(None)
+            else: clean_row.append(val)
+        ws.append(clean_row)
 
     wb.save(EXCEL_PATH)
     wb.close()
