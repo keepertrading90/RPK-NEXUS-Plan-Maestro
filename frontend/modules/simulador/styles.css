@@ -390,35 +390,46 @@ body {
 .control-bar {
     display: flex;
     background: var(--dark-surface);
-    padding: 0.8rem 1.2rem;
+    padding: 1rem 1.2rem;
     border-radius: 8px;
     align-items: center;
-    gap: 1.5rem;
+    justify-content: space-between;
+    gap: 1rem;
     border: 1px solid var(--border-color);
     margin-bottom: 1.5rem;
-    box-shadow: var(--shadow);
-    flex-wrap: wrap;
-    max-width: 100%;
-    justify-content: space-between;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+
+    /* Garantías absolutas de Layout vs Paneles Laterales */
+    width: 100%;
+    box-sizing: border-box;
+    flex-wrap: nowrap;
+    /* Tienen que entrar todas inline, hay espacio de sobra */
+    overflow: hidden;
+    /* Corta cualquier cosa que se salga antes de chocar con sidebars */
 }
 
 .filters-container {
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 1.5rem;
+    flex-wrap: nowrap;
+    /* Forzar en 1 línea */
+    align-items: flex-end;
+    /* Alinear a la base (inputs/botones) */
+    gap: 1rem;
 }
 
 .control-group {
     display: flex;
-    align-items: center;
-    gap: 0.8rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.3rem;
 }
 
 .control-group label {
-    font-size: 0.8rem;
+    font-size: 0.7rem;
     font-weight: 600;
     color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
     white-space: nowrap;
 }
 
@@ -660,23 +671,31 @@ body {
     flex-direction: row;
     align-items: center;
     gap: 0.5rem;
+    /* Ajuste de altura exacto para cuadrar con los inputs de arriba */
+    height: 31px;
 }
 
 .control-actions.inline-actions .action-btn {
-    padding: 0.4rem 1rem;
-    font-size: 0.85rem;
+    padding: 0 1rem;
+    height: 100%;
+    font-size: 0.8rem;
+    display: inline-flex;
+    align-items: center;
+    border-radius: 4px;
 }
 
 .scenario-current-display.new-layout {
     display: flex;
     flex-direction: row;
     align-items: center;
-    padding-left: 1.5rem;
-    border-left: 2px solid var(--rpk-red);
-    height: 100%;
-    flex-shrink: 0;
+    background: rgba(227, 6, 19, 0.08);
+    /* Acento premium RPK */
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    border: 1px solid rgba(227, 6, 19, 0.2);
     gap: 1rem;
     white-space: nowrap;
+    /* No pushear margin-left: auto si usamos space-between en parent */
 }
 
 .scenario-text-wrapper {
@@ -688,15 +707,16 @@ body {
 
 .scenario-label {
     font-size: 0.7rem;
-    color: var(--rpk-red);
+    color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 1px;
     font-weight: 600;
+    margin-bottom: 2px;
 }
 
 #current-scenario-name {
-    color: white;
-    font-size: 1.1rem;
+    color: var(--rpk-red);
+    font-size: 1.2rem;
     font-weight: 800;
 }
 
