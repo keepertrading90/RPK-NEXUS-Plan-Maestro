@@ -46,6 +46,7 @@ Este documento es la **fuente de la verdad arquitectónica** para la IA y los de
 | `/api/simulate/{scenario}` | GET | Simulador mutado según DB. Acepta flag `?use_actual=true` |
 | `/api/simulate/preview` | POST | Preview on-the-fly (`overrides_list`) sin guardado. Acepta flag `?use_actual=true` |
 | `/api/scenarios` | GET/POST | Listado y Creación de escenarios |
+| `/api/articles` | POST/DEL | CRUD de Artículos en Simulador (Añade/Borra con backup automático en Excel) |
 
 ### Resiliencia de Red
 - Todo acceso a `Y:\` envuelto en `try/except`. Si hay file lock → `logging.warning` + terminación silenciosa.
@@ -86,6 +87,7 @@ Este documento es la **fuente de la verdad arquitectónica** para la IA y los de
 
 | Fecha | Versión | Cambios |
 |-------|---------|---------|
+| Mar 2026 | v5.6.0 | Módulo Simulador: Gestión de Artículos (CRUD) con persistencia directa y segura en Excel Maestro `MAESTRO FLEJE_v1.xlsx` |
 | Mar 2026 | v5.5.2 | Comparativa KPI Avanzada, sanitización de ghost history SQLite, overrides dinámicos de MOD y Turnos en simulador |
 | Mar 2026 | v5.5.1 | Evolución "Camino Dorado": V2 Motor Analítico inyectado en Simulador V1 (Demanda Neta real) vía `use_actual` |
 | Mar 2026 | v5.5 | Integración nativa del Simulador V1 Classic (Zero-Latency con SQLAlchemy/Calamine/Cache .pkl) |

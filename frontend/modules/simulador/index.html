@@ -95,18 +95,18 @@
                     </div>
                 </div>
 
+                <div class="scenario-current-display">
+                    <span id="current-scenario-name">Escenario Base</span>
+                    <button id="btn-download-scenario-pdf" class="action-btn small" onclick="downloadScenarioPDF()"
+                        style="background: rgba(227,6,19,0.1); color: var(--rpk-red); border: 1px solid var(--rpk-red); font-size: 0.75rem;">📥
+                        Descargar Informe</button>
+                </div>
+
                 <div class="control-actions spacer">
                     <div class="action-buttons">
                         <button id="btn-apply-filter" class="action-btn">Aplicar Filtros</button>
                         <button id="btn-clear-filter" class="action-btn secondary">Limpiar</button>
                     </div>
-                </div>
-
-                <div class="scenario-current-display" style="display: flex; gap: 10px; align-items: center;">
-                    <span id="current-scenario-name">Escenario Base</span>
-                    <button id="btn-download-scenario-pdf" class="action-btn small" onclick="downloadScenarioPDF()"
-                        style="background: rgba(227,6,19,0.1); color: var(--rpk-red); border: 1px solid var(--rpk-red); font-size: 0.75rem;">📥
-                        Descargar Informe</button>
                 </div>
             </div>
 
@@ -146,7 +146,8 @@
                     <h4>Detalle de Artículos</h4>
                     <div style="display: flex; gap: 8px; align-items: center;">
                         <input type="text" id="table-search" placeholder="Buscar artículo..." class="search-input">
-                        <button id="btn-new-article" class="action-btn" style="white-space: nowrap; background: rgba(227,6,19,0.15); color: var(--rpk-red); border: 1px solid var(--rpk-red); font-size: 0.75rem; padding: 0.35rem 0.7rem;"
+                        <button id="btn-new-article" class="action-btn"
+                            style="white-space: nowrap; background: rgba(227,6,19,0.15); color: var(--rpk-red); border: 1px solid var(--rpk-red); font-size: 0.75rem; padding: 0.35rem 0.7rem;"
                             onclick="openNewArticleModal()">➕ Nuevo Artículo</button>
                     </div>
                 </div>
@@ -320,7 +321,8 @@
     <div id="new-article-modal" class="modal">
         <div class="modal-content small-modal">
             <h3>➕ Nuevo Artículo</h3>
-            <p style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 1rem;">Este artículo se añadirá permanentemente al Excel maestro.</p>
+            <p style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 1rem;">Este artículo se añadirá
+                permanentemente al Excel maestro.</p>
             <form id="new-article-form">
                 <div class="form-grid">
                     <div class="form-group">
@@ -341,7 +343,8 @@
                     </div>
                     <div class="form-group">
                         <label for="new-art-oee">OEE (%)</label>
-                        <input type="number" id="new-art-oee" class="dark-input" value="75" min="0" max="100" step="any">
+                        <input type="number" id="new-art-oee" class="dark-input" value="75" min="0" max="100"
+                            step="any">
                     </div>
                     <div class="form-group">
                         <label for="new-art-dias">Días Laborales</label>
@@ -350,7 +353,8 @@
                 </div>
                 <div class="modal-actions">
                     <button type="submit" class="btn-primary">Crear Artículo</button>
-                    <button type="button" class="btn-secondary" onclick="document.getElementById('new-article-modal').style.display='none'">Cancelar</button>
+                    <button type="button" class="btn-secondary"
+                        onclick="document.getElementById('new-article-modal').style.display='none'">Cancelar</button>
                 </div>
             </form>
         </div>
@@ -360,11 +364,16 @@
     <div id="delete-confirm-modal" class="modal">
         <div class="modal-content small-modal" style="max-width: 420px;">
             <h3 style="color: var(--rpk-red);">🗑️ Eliminar Artículo</h3>
-            <p style="color: #ccc; margin: 1rem 0;">¿Estás seguro de que deseas eliminar <strong id="delete-art-name" style="color: white;"></strong> del centro <strong id="delete-art-centro" style="color: white;"></strong>?</p>
-            <p style="color: #f87171; font-size: 0.8rem;">⚠️ Esta acción es irreversible y eliminará el artículo del Excel maestro. Se creará un backup automático.</p>
+            <p style="color: #ccc; margin: 1rem 0;">¿Estás seguro de que deseas eliminar <strong id="delete-art-name"
+                    style="color: white;"></strong> del centro <strong id="delete-art-centro"
+                    style="color: white;"></strong>?</p>
+            <p style="color: #f87171; font-size: 0.8rem;">⚠️ Esta acción es irreversible y eliminará el artículo del
+                Excel maestro. Se creará un backup automático.</p>
             <div class="modal-actions" style="margin-top: 1.5rem;">
-                <button id="btn-confirm-delete" class="btn-primary" style="background: var(--rpk-red); border-color: var(--rpk-red);">Eliminar Permanentemente</button>
-                <button type="button" class="btn-secondary" onclick="document.getElementById('delete-confirm-modal').style.display='none'">Cancelar</button>
+                <button id="btn-confirm-delete" class="btn-primary"
+                    style="background: var(--rpk-red); border-color: var(--rpk-red);">Eliminar Permanentemente</button>
+                <button type="button" class="btn-secondary"
+                    onclick="document.getElementById('delete-confirm-modal').style.display='none'">Cancelar</button>
             </div>
         </div>
     </div>

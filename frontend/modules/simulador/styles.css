@@ -379,7 +379,9 @@ body {
    ========================================= */
 .center-panel {
     flex: 1;
+    min-width: 0;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 1.5rem;
     background: radial-gradient(circle at top center, rgba(227, 6, 19, 0.05), transparent 600px);
 }
@@ -395,6 +397,8 @@ body {
     border: 1px solid var(--border-color);
     margin-bottom: 1.5rem;
     box-shadow: var(--shadow);
+    flex-wrap: wrap;
+    max-width: 100%;
 }
 
 .control-group {
@@ -644,7 +648,7 @@ body {
 }
 
 .control-actions.spacer {
-    margin-left: auto;
+    margin-right: 1.5rem;
 }
 
 .action-buttons {
@@ -660,11 +664,14 @@ body {
 
 .scenario-current-display {
     display: flex;
-    flex-direction: column;
-    justify-content: center;
+    flex-direction: row;
+    align-items: center;
     padding-left: 1rem;
     border-left: 2px solid var(--rpk-red);
     height: 100%;
+    flex-shrink: 0;
+    gap: 10px;
+    white-space: nowrap;
 }
 
 #current-scenario-name {
