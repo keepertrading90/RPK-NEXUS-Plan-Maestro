@@ -246,7 +246,9 @@ function renderTable(detail) {
     let filtered = detail;
     if (search) filtered = filtered.filter(d => d.Articulo.toString().toLowerCase().includes(search));
 
-    body.innerHTML = filtered.slice(0, 100).map(d => {
+    body.innerHTML = filtered.map(d => {
+        const hasMissingData = !d['Piezas por minuto'] || !d['Volumen anual'];
+
         const sat = (d.Saturacion * 100).toFixed(1);
         const satClass = sat > 85 ? 'pill-high' : (sat > 70 ? 'pill-mid' : 'pill-low');
         const impact = totalGroupDemand > 0 ? ((d['Volumen anual'] / totalGroupDemand) * 100).toFixed(1) : 0;
@@ -258,14 +260,17 @@ function renderTable(detail) {
         else if (shifts == 24) shiftLabel = "3 Turnos (24h)";
 
         return `
-            <tr>
-                <td><strong>${d.Articulo}</strong></td>
+            <tr ${hasMissingData ? 'style="background-color: rgba(255, 165, 0, 0.05);"' : ''}>
+                <td>
+                    <strong>${d.Articulo}</strong>
+                    ${hasMissingData ? '<span style="color: #fbbf24; cursor: help; margin-left: 4px;" title="Aviso: Falta Piezas por Minuto o Volumen Anual en el Excel Maestro">⚠️</span>' : ''}
+                </td>
                 <td class="text-center">
                     <span class="center-tag">${d.Centro}</span>
                     <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 4px;">${shiftLabel}</div>
                 </td>
-                <td class="text-right">${d['Volumen anual'].toLocaleString()}</td>
-                <td class="text-right">${Math.round(d['Piezas por minuto'])}</td>
+                <td class="text-right ${!d['Volumen anual'] ? 'text-warning' : ''}">${(d['Volumen anual'] || 0).toLocaleString()}</td>
+                <td class="text-right ${!d['Piezas por minuto'] ? 'text-warning' : ''}">${Math.round(d['Piezas por minuto'] || 0)}</td>
                 <td class="text-right">${(d['%OEE'] * 100).toFixed(1)}%</td>
                 <td class="text-center">
                     <span class="saturation-pill ${satClass}">${sat}%</span>
@@ -291,7 +296,7 @@ function renderTable(detail) {
                     <button class="secondary-btn btn-delete-art" 
                         style="padding: 0.3rem 0.4rem; font-size: 0.8rem; background: transparent; border: 1px solid #555; color: #888; cursor: pointer; margin-left: 4px;"
                         data-articulo="${d.Articulo}" 
-                        data-centro="${d.Centro}"
+                        data-centro="${d.centro_original || d.Centro}"
                         title="Eliminar artículo">🗑️</button>
                 </td>
             </tr>

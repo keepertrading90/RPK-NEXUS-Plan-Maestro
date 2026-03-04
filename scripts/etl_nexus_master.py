@@ -22,7 +22,7 @@ SOURCES = {
     "albaranes": Path(NETWORK_IP) / "Consulta Listado de Albaranes",
     "existencias": Path(NETWORK_IP) / "Listado de Existencias Actuales",
     "carga_centros": Path(NETWORK_IP) / "List Avance Obra-Centro y Operacion",
-    "maestro_local": BASE_DIR.parent / "MAESTRO FLEJE_v1.xlsx",
+    "maestro_local": BASE_DIR.parent / "MAESTRO FLEJE.xlsx",
     "rutas_ingenieria": None,
     "objetivos_stock": Path(NETWORK_IP) / "PANEL" / "_PROYECTOS" / "DASHBOARD_STOCK" / "backend" / "OBJETIVOS_STOCK.xlsx"
 }
