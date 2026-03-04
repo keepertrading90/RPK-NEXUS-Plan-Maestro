@@ -1956,7 +1956,7 @@ async function submitNewArticle(e) {
 
     setLoading(true);
     try {
-        const res = await fetch(`${API_BASE}/articles`, {
+        const res = await fetch(`${API_BASE}/articulos/`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ articulo, centro, volumen_anual, piezas_por_minuto, oee, dias_laborales })
@@ -1967,6 +1967,10 @@ async function submitNewArticle(e) {
         if (!res.ok) {
             alert('Error: ' + (result.detail || result.message || 'Error desconocido'));
             return;
+        }
+
+        if (result.status === 'warning') {
+            alert('Aviso: ' + result.message);
         }
 
         document.getElementById('new-article-modal').style.display = 'none';
@@ -1999,10 +2003,10 @@ async function confirmDeleteArticle() {
 
     setLoading(true);
     try {
-        const res = await fetch(`${API_BASE}/articles`, {
+        const deleteUrl = `${API_BASE}/articulos/${encodeURIComponent(pendingDeleteArticulo)}?centro=${encodeURIComponent(pendingDeleteCentro)}`;
+        const res = await fetch(deleteUrl, {
             method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ articulo: pendingDeleteArticulo, centro: pendingDeleteCentro })
+            headers: { 'Content-Type': 'application/json' }
         });
 
         const result = await res.json();
@@ -2010,6 +2014,10 @@ async function confirmDeleteArticle() {
         if (!res.ok) {
             alert('Error: ' + (result.detail || result.message || 'Error desconocido'));
             return;
+        }
+
+        if (result.status === 'warning') {
+            alert('Aviso: ' + result.message);
         }
 
         document.getElementById('delete-confirm-modal').style.display = 'none';

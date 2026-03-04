@@ -821,11 +821,11 @@ async def post_comparison_simulate(payload: ComparisonSimulatePayload, db: Sessi
 # CRUD DE ARTÍCULOS (Persistencia en Excel Maestro)
 # ============================================================
 
-@app.post("/api/articles")
+@app.post("/api/articulos/")
 async def create_article(payload: ArticleCreate):
-    """Crea un artículo nuevo en el Excel maestro."""
+    """Crea un artículo nuevo en el simulador."""
     try:
-        result = simulation_core.add_article_to_excel(payload.model_dump())
+        result = simulation_core.add_article(payload.model_dump())
         if result["status"] == "error":
             raise HTTPException(status_code=400, detail=result["message"])
         return result
@@ -835,11 +835,11 @@ async def create_article(payload: ArticleCreate):
         print(f"[ERROR] create_article: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.delete("/api/articles")
-async def delete_article(payload: ArticleDelete):
-    """Elimina un artículo del Excel maestro."""
+@app.delete("/api/articulos/{id_articulo}")
+async def remove_article(id_articulo: str, centro: str):
+    """Elimina un artículo del simulador."""
     try:
-        result = simulation_core.delete_article_from_excel(payload.articulo, payload.centro)
+        result = simulation_core.delete_article(id_articulo, centro)
         if result["status"] == "error":
             raise HTTPException(status_code=404, detail=result["message"])
         return result
@@ -848,6 +848,7 @@ async def delete_article(payload: ArticleDelete):
     except Exception as e:
         print(f"[ERROR] delete_article: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.delete("/api/scenarios/{scenario_id}")
 def delete_scenario(scenario_id: int, db: Session = Depends(get_db_sim)):
