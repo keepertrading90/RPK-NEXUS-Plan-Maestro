@@ -1,9 +1,10 @@
 import pandas as pd
 import os
 import time
+import shutil
 import functools
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Dict, Optional
 from datetime import datetime, timedelta
 
 # Configuración de rutas para RPK NEXUS
@@ -351,3 +352,133 @@ def get_simulation_data(db: Session, scenario_id: int = None, dias_laborales: in
             ] if selected_overrides else []
         }
     }
+
+
+# ============================================================
+# CRUD DE ARTÍCULOS (Persistencia en Excel Maestro)
+# ============================================================
+
+def invalidate_cache():
+    """Borra la caché en memoria y el archivo pickle para forzar recarga desde Excel."""
+    global _df_cache
+    _df_cache = None
+    cache_path = EXCEL_PATH + ".cache.pkl"
+    if os.path.exists(cache_path):
+        os.remove(cache_path)
+        print("[INFO] Caché pickle eliminada.", flush=True)
+
+
+def _create_backup():
+    """Crea un backup del Excel maestro antes de cualquier mutación."""
+    backup_path = EXCEL_PATH.replace(".xlsx", "_backup.xlsx")
+    shutil.copy2(EXCEL_PATH, backup_path)
+    print(f"[INFO] Backup creado: {backup_path}", flush=True)
+    return backup_path
+
+
+def add_article_to_excel(data: Dict) -> Dict:
+    """
+    Añade un artículo nuevo al Excel maestro.
+    Valida duplicados, crea backup, escribe y limpia caché.
+    
+    data keys: articulo, centro, volumen_anual, piezas_por_minuto, oee, dias_laborales (opcional)
+    """
+    import openpyxl  # Solo para escritura puntual (no lectura masiva)
+
+    articulo = str(data.get("articulo", "")).strip()
+    centro = str(data.get("centro", "")).strip()
+    
+    if not articulo or not centro:
+        return {"status": "error", "message": "Articulo y Centro son obligatorios."}
+
+    # Leer Excel actual para validar duplicados
+    df_current = pd.read_excel(EXCEL_PATH, engine="calamine")
+    df_current['Articulo'] = df_current['Articulo'].astype(str).str.replace(r'\.0$', '', regex=True)
+    df_current['Centro'] = df_current['Centro'].astype(str).str.replace(r'\.0$', '', regex=True)
+    
+    # Validar duplicado
+    mask = (df_current['Articulo'] == articulo) & (df_current['Centro'] == centro)
+    if mask.any():
+        return {"status": "error", "message": f"El artículo {articulo} ya existe en el centro {centro}."}
+
+    # Parámetros
+    dias_lab = float(data.get("dias_laborales", 238))
+    vol_anual = float(data.get("volumen_anual", 0))
+    ppm = float(data.get("piezas_por_minuto", 0))
+    oee = float(data.get("oee", 0))
+
+    # Calcular columnas derivadas (misma lógica que el Excel original)
+    pph = ppm * 60
+    ppd_16 = pph * 16
+    ppd_24 = pph * 24
+    ppd_oee_24 = ppd_24 * oee
+    ppd_oee_16 = ppd_16 * oee
+    pps_24 = ppd_24 * 5
+    pps_16 = ppd_16 * 5
+
+    # Crear backup
+    _create_backup()
+
+    # Escribir nueva fila con openpyxl
+    wb = openpyxl.load_workbook(EXCEL_PATH)
+    ws = wb.active
+    new_row = [dias_lab, articulo, float(centro), vol_anual, ppm, pph, ppd_16, ppd_24, ppd_oee_24, ppd_oee_16, pps_24, pps_16, oee]
+    ws.append(new_row)
+    wb.save(EXCEL_PATH)
+    wb.close()
+
+    # Invalidar caché
+    invalidate_cache()
+
+    print(f"[OK] Artículo {articulo} añadido al centro {centro}.", flush=True)
+    return {"status": "success", "message": f"Artículo {articulo} añadido al centro {centro}."}
+
+
+def delete_article_from_excel(articulo: str, centro: str) -> Dict:
+    """
+    Elimina un artículo del Excel maestro.
+    Crea backup, elimina la fila, reescribe y limpia caché.
+    """
+    import openpyxl
+
+    articulo = str(articulo).strip()
+    centro = str(centro).strip()
+
+    if not articulo or not centro:
+        return {"status": "error", "message": "Articulo y Centro son obligatorios."}
+
+    # Leer y verificar existencia
+    df_current = pd.read_excel(EXCEL_PATH, engine="calamine")
+    df_current['Articulo'] = df_current['Articulo'].astype(str).str.replace(r'\.0$', '', regex=True)
+    df_current['Centro'] = df_current['Centro'].astype(str).str.replace(r'\.0$', '', regex=True)
+
+    mask = (df_current['Articulo'] == articulo) & (df_current['Centro'] == centro)
+    if not mask.any():
+        return {"status": "error", "message": f"No se encontró el artículo {articulo} en el centro {centro}."}
+
+    # Crear backup antes de borrar
+    _create_backup()
+
+    # Eliminar fila(s) y reescribir
+    df_cleaned = df_current[~mask].copy()
+
+    # Reescribir el Excel completo con openpyxl preservando formato
+    wb = openpyxl.load_workbook(EXCEL_PATH)
+    ws = wb.active
+
+    # Borrar todo el contenido excepto cabecera
+    for row in range(ws.max_row, 1, -1):
+        ws.delete_rows(row)
+
+    # Reescribir filas desde el DataFrame limpio
+    for _, row_data in df_cleaned.iterrows():
+        ws.append(row_data.tolist())
+
+    wb.save(EXCEL_PATH)
+    wb.close()
+
+    # Invalidar caché
+    invalidate_cache()
+
+    print(f"[OK] Artículo {articulo} eliminado del centro {centro}.", flush=True)
+    return {"status": "success", "message": f"Artículo {articulo} eliminado del centro {centro}."}

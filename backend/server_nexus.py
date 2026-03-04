@@ -117,6 +117,18 @@ class ComparisonSimulatePayload(BaseModel):
     center_configs: Optional[dict] = {}
     config: Optional[dict] = {}
 
+class ArticleCreate(BaseModel):
+    articulo: str
+    centro: str
+    volumen_anual: float = 0
+    piezas_por_minuto: float = 0
+    oee: float = 0.75
+    dias_laborales: float = 238
+
+class ArticleDelete(BaseModel):
+    articulo: str
+    centro: str
+
 # Auxiliares de Base de Datos
 def query_db(query, args=(), one=False):
     try:
@@ -803,6 +815,38 @@ async def post_comparison_simulate(payload: ComparisonSimulatePayload, db: Sessi
         )
     except Exception as e:
         print(f"[ERROR] post_comparison_simulate: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================
+# CRUD DE ARTÍCULOS (Persistencia en Excel Maestro)
+# ============================================================
+
+@app.post("/api/articles")
+async def create_article(payload: ArticleCreate):
+    """Crea un artículo nuevo en el Excel maestro."""
+    try:
+        result = simulation_core.add_article_to_excel(payload.model_dump())
+        if result["status"] == "error":
+            raise HTTPException(status_code=400, detail=result["message"])
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] create_article: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/articles")
+async def delete_article(payload: ArticleDelete):
+    """Elimina un artículo del Excel maestro."""
+    try:
+        result = simulation_core.delete_article_from_excel(payload.articulo, payload.centro)
+        if result["status"] == "error":
+            raise HTTPException(status_code=404, detail=result["message"])
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] delete_article: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/api/scenarios/{scenario_id}")
