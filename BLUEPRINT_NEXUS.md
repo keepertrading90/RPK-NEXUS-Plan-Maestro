@@ -46,7 +46,7 @@ Este documento es la **fuente de la verdad arquitectónica** para la IA y los de
 | `/api/simulate/{scenario}` | GET | Simulador mutado según DB. Acepta flag `?use_actual=true` |
 | `/api/simulate/preview` | POST | Preview on-the-fly (`overrides_list`) sin guardado. Acepta flag `?use_actual=true` |
 | `/api/scenarios` | GET/POST | Listado y Creación de escenarios |
-| `/api/articles` | POST/DEL | CRUD de Artículos en Simulador (Añade/Borra con backup automático en Excel) |
+| `/api/articulos/` | POST/DEL | CRUD de Artículos en Simulador (Añade/Borra con backup automático y cola JSON si el Excel está bloqueado) |
 
 ### Resiliencia de Red
 - Todo acceso a `Y:\` envuelto en `try/except`. Si hay file lock → `logging.warning` + terminación silenciosa.
