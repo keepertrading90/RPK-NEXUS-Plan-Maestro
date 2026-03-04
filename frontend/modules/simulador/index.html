@@ -68,45 +68,49 @@
 
             <!-- Filter Bar / Controls -->
             <div class="control-bar">
-                <div class="control-group">
-                    <label>Días Laborales:</label>
-                    <input type="number" id="work-days" value="238" class="dark-input small-input">
-                </div>
+                <div class="filters-container">
+                    <div class="control-group">
+                        <label>Días Laborales:</label>
+                        <input type="number" id="work-days" value="238" class="dark-input small-input">
+                    </div>
 
-                <div class="control-group">
-                    <label>Turno General:</label>
-                    <select id="work-shifts" class="dark-input">
-                        <option value="8">1 Turno (8h)</option>
-                        <option value="16" selected>2 Turnos (16h)</option>
-                        <option value="24">3 Turnos (24h)</option>
-                    </select>
-                </div>
+                    <div class="control-group">
+                        <label>Turno General:</label>
+                        <select id="work-shifts" class="dark-input">
+                            <option value="8">1 Turno (8h)</option>
+                            <option value="16" selected>2 Turnos (16h)</option>
+                            <option value="24">3 Turnos (24h)</option>
+                        </select>
+                    </div>
 
-                <div class="control-group">
-                    <label>Sectores / Centros:</label>
-                    <div id="work-center-dropdown" class="custom-dropdown">
-                        <div class="dropdown-btn" onclick="toggleDropdown()">
-                            <span id="dropdown-text">-- Todos los Centros --</span>
-                            <span class="arrow">▼</span>
-                        </div>
-                        <div id="work-center-options" class="dropdown-content">
-                            <!-- JS Generated Options -->
+                    <div class="control-group">
+                        <label>Sectores / Centros:</label>
+                        <div id="work-center-dropdown" class="custom-dropdown">
+                            <div class="dropdown-btn" onclick="toggleDropdown()">
+                                <span id="dropdown-text">-- Todos los Centros --</span>
+                                <span class="arrow">▼</span>
+                            </div>
+                            <div id="work-center-options" class="dropdown-content">
+                                <!-- JS Generated Options -->
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <div class="scenario-current-display">
-                    <span id="current-scenario-name">Escenario Base</span>
-                    <button id="btn-download-scenario-pdf" class="action-btn small" onclick="downloadScenarioPDF()"
-                        style="background: rgba(227,6,19,0.1); color: var(--rpk-red); border: 1px solid var(--rpk-red); font-size: 0.75rem;">📥
-                        Descargar Informe</button>
-                </div>
-
-                <div class="control-actions spacer">
-                    <div class="action-buttons">
+                    <div class="control-actions inline-actions">
                         <button id="btn-apply-filter" class="action-btn">Aplicar Filtros</button>
                         <button id="btn-clear-filter" class="action-btn secondary">Limpiar</button>
                     </div>
+                </div>
+
+                <div class="scenario-current-display new-layout">
+                    <div class="scenario-text-wrapper">
+                        <span class="scenario-label">Escenario Activo</span>
+                        <span id="current-scenario-name">Escenario Base</span>
+                    </div>
+                    <button id="btn-download-scenario-pdf" class="action-btn small download-btn"
+                        onclick="downloadScenarioPDF()">
+                        📥 Descargar Informe
+                    </button>
                 </div>
             </div>
 
