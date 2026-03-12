@@ -1,12 +1,13 @@
 @echo off
-title RPK NEXUS HUB - Centro de Control
+title RPK NEXUS HUB v5.6.0 - Centro de Control
 setlocal
 
 :: Colores RPK (Fondo negro, texto rojo)
 color 0C
 
 echo ============================================================
-echo        RPK NEXUS : PORTAL DE CONTROL INTELIGENTE
+echo   RPK NEXUS v5.6.0 : PORTAL DE CONTROL INTELIGENTE
+echo   Modulo: Simulador de Planta [CRUD Habilitado]
 echo ============================================================
 echo.
 
