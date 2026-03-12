@@ -22,9 +22,10 @@ SOURCES = {
     "albaranes": Path(NETWORK_IP) / "Consulta Listado de Albaranes",
     "existencias": Path(NETWORK_IP) / "Listado de Existencias Actuales",
     "carga_centros": Path(NETWORK_IP) / "List Avance Obra-Centro y Operacion",
-    "maestro_local": BASE_DIR.parent / "MAESTRO FLEJE.xlsx",
+    "maestro_local": BASE_DIR / "db" / "MAESTRO FLEJE.xlsx",
     "rutas_ingenieria": None,
-    "objetivos_stock": Path(NETWORK_IP) / "PANEL" / "_PROYECTOS" / "DASHBOARD_STOCK" / "backend" / "OBJETIVOS_STOCK.xlsx"
+    "objetivos_stock": Path(NETWORK_IP) / "PANEL" / "_PROYECTOS" / "DASHBOARD_STOCK" / "backend" / "OBJETIVOS_STOCK.xlsx",
+    "ocupacion": Path(NETWORK_IP) / "Listado ubicaciones vacias"
 }
 
 # Estructura de Data Lakehouse
@@ -47,8 +48,18 @@ def clean_val(v):
     if isinstance(v, (int, float)): return float(v)
     s = str(v).strip().replace(' ', '')
     if not s: return 0.0
-    if ',' in s and '.' in s: s = s.replace('.', '').replace(',', '.')
-    elif ',' in s: s = s.replace(',', '.')
+    
+    # Lógica robusta para formato europeo (6.678.165 o 1.234,56)
+    if ',' in s and '.' in s:
+        # Estilo 1.234,56 -> quitar puntos, cambiar coma por punto
+        s = s.replace('.', '').replace(',', '.')
+    elif ',' in s:
+        # Estilo 1234,56 -> cambiar coma por punto
+        s = s.replace(',', '.')
+    elif s.count('.') > 1:
+        # Estilo 6.678.165 -> quitar todos los puntos
+        s = s.replace('.', '')
+    
     s = re.sub(r'[^\d.\-]', '', s)
     try: return float(s) if s else 0.0
     except: return 0.0
@@ -71,7 +82,8 @@ def store_parquet(df: pd.DataFrame, target_path: Path, partition: bool = False):
         now = datetime.now()
         partition_path = target_path / f"year={now.year}" / f"month={now.month:02d}"
         partition_path.mkdir(parents=True, exist_ok=True)
-        final_file = partition_path / f"{target_path.stem}_{now.strftime('%Y%m%d%H%M')}.parquet"
+        # EVITAR DUPLICADOS: Usar solo la fecha, no la hora. Sobrescribir el del día.
+        final_file = partition_path / f"{target_path.stem}_{now.strftime('%Y%m%d')}.parquet"
     else:
         target_path.parent.mkdir(parents=True, exist_ok=True)
         final_file = target_path.with_suffix(".parquet")
@@ -251,6 +263,21 @@ def process_albaranes(file_path):
     
     return df_res
 
+def process_ocupacion(file_path):
+    df = pd.read_excel(file_path, engine='calamine')
+    date_str = extract_date_from_filename(file_path.name)
+    
+    if len(df.columns) >= 4:
+        df_res = pd.DataFrame()
+        df_res['Fecha_Snapshot'] = [date_str] * len(df)
+        df_res['Mapa'] = df.iloc[:, 0].astype(str).str.strip().replace('nan', '')
+        df_res['Ubicacion'] = df.iloc[:, 1].astype(str).str.strip().replace('nan', '')
+        df_res['Tipo_Ubicacion'] = df.iloc[:, 2].astype(str).str.strip().replace('nan', '')
+        df_res['Vacia'] = df.iloc[:, 3].astype(str).str.strip().str.upper().replace('NAN', '')
+        df_res = df_res[df_res['Ubicacion'] != '']
+        return df_res
+    return None
+
 def run_etl():
     start = time.time()
     logging.info(">>> INICIANDO CORAZON ETL VECTORIZADO (LAKEHOUSE) v5.5 <<<")
@@ -309,6 +336,33 @@ def run_etl():
                 logging.info(f"Albaranes guardado: {len(df)} filas.")
     except Exception as e:
         logging.warning(f"Error Albaranes: {e}")
+
+    # 5. Maestro Fleje (Simulador Base)
+    try:
+        f = SOURCES["maestro_local"]
+        if f and f.exists():
+            logging.info(f"Procesando Maestro Fleje... {f.name}")
+            df = pd.read_excel(f, engine='calamine')
+            # Limpiar nombres de columnas para que sean SQL-friendly
+            df.columns = [str(c).strip().replace(' ', '_').replace('(', '').replace(')', '').replace('%', 'PCT_') for c in df.columns]
+            p = store_parquet(df, LAKE_DIR / "maestros" / "maestro_fleje")
+            results["maestro_fleje"] = {"path": p, "type": "maestro"}
+            logging.info(f"Maestro Fleje sincronizado: {len(df)} filas.")
+    except Exception as e:
+        logging.warning(f"Error Maestro Fleje: {e}")
+
+    # 6. Ocupacion
+    try:
+        f = get_latest_excel(SOURCES["ocupacion"])
+        if f:
+            logging.info(f"Procesando Ocupacion... {f.name}")
+            df = process_ocupacion(f)
+            if df is not None and not df.empty:
+                p = store_parquet(df, LAKE_DIR / "transaccional" / "ocupacion", partition=True)
+                results["ocupacion"] = {"path": p, "type": "transaccional"}
+                logging.info(f"Ocupacion guardado: {len(df)} filas.")
+    except Exception as e:
+        logging.warning(f"Error Ocupacion: {e}")
 
     # Sincronizar DuckDB View mappings
     sync_duckdb(results)

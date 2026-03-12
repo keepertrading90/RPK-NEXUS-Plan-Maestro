@@ -27,13 +27,21 @@ STATIC_DIR = BASE_DIR / "frontend"
 if str(BASE_DIR) not in sys.path:
     sys.path.append(str(BASE_DIR))
 
-from backend.db.consultor import traducir_a_sql, ejecutar_consulta
+from backend.db.consultor import traducir_a_sql, ejecutar_consulta, formatear_humanamente
 from backend.db import models_sim
 from backend.core import simulation_core
 from backend.analytics_core import get_cobertura_global
-import json
+from backend.nexus_rag import nexus_rag       # FASE 3: Motor RAG
+from backend.nexus_memoria import nexus_memoria # FASE 4: Memoria conversacional
+from backend.nexus_alertas import nexus_alertas # FASE 4: Alertas proactivas
+from fastapi.responses import StreamingResponse
+import json, asyncio
 from sqlalchemy.orm import Session
-from backend.api import pdf_stock, pdf_tiempos, pdf_pedidos, pdf_comparativa, pdf_escenario
+
+# ── Arrancar motores IA en background ─────────────────────────────────
+nexus_rag.start_async()       # Indexa artículos y centros en RAM
+nexus_alertas.start_async()   # Analiza DuckDB y genera alertas
+from backend.api import pdf_stock, pdf_tiempos, pdf_pedidos, pdf_comparativa, pdf_escenario, pdf_stock_advanced, pdf_stock_objectives
 
 # Inicializar tablas del simulador
 models_sim.init_sim_db()
@@ -64,6 +72,8 @@ app.include_router(pdf_tiempos.router, prefix="/api", tags=["reports"])
 app.include_router(pdf_pedidos.router, prefix="/api", tags=["reports"])
 app.include_router(pdf_comparativa.router, prefix="/api", tags=["reports"])
 app.include_router(pdf_escenario.router, prefix="/api", tags=["reports"])
+app.include_router(pdf_stock_advanced.router, prefix="/api", tags=["reports"])
+app.include_router(pdf_stock_objectives.router, prefix="/api", tags=["reports"])
 
 # Modelos para el Simulador
 class OverrideBase(BaseModel):
@@ -176,6 +186,8 @@ PARQUET_TABLE_MAP = {
     "pedidos": {"transaccional": "transaccional/pedidos"},
     "albaranes": {"transaccional": "transaccional/albaranes"},
     "carga_detalle": {"transaccional": "transaccional/carga_detalle"},
+    "maestro_fleje": {"maestro": "maestros/maestro_fleje.parquet"},
+    "ocupacion": {"transaccional": "transaccional/ocupacion"},
 }
 
 def _find_latest_parquet(table_name: str) -> Path:
@@ -274,31 +286,290 @@ async def get_status(request: Request):
 
 class ChatRequest(BaseModel):
     text: str
+    session_id: str = "default"
+    limpiar_historial: bool = False
+
+# ── SCHEMA compacto para que Qwen lo conozca ────────────────────────────────
+NEXUS_SCHEMA = """
+Tablas DuckDB RPK NEXUS:
+- existencias(Fecha, Cliente, Articulo, Descripcion, Cantidad, Valor_Total, Stock_Objetivo, month, year)
+- carga_centros(Fecha, Centro, Carga_Dia, month, year)  -- Centro=numero maquina ej: 142
+- carga_detalle(Fecha, Centro, Articulo, Carga_Dia, month, year)
+- pedidos(Fecha, Cliente, Articulo, Descripcion, Cantidad, Valor_Total, month, year)
+- albaranes(Fecha, Cliente, Articulo, Descripcion, Cantidad, Valor_Total, month, year)
+- maestro_fleje(Articulo, Descripcion, Centro, Piezas_Hora, OEE, Cadencia_Min, Cadencia_Max, Cadencia_Actual, Volumen_Anual)
+- tiempos_detalle_articulo(Articulo, Centro, Tiempo_Ciclo, OEE, Carga_Total_Horas)
+- ocupacion(Fecha_Snapshot, Mapa, Ubicacion, Tipo_Ubicacion, Vacia, month, year)
+"""
+
+# Prompt ÚNICO que hace SQL + respuesta en una sola llamada
+PROMPT_UNICO = """Eres Quen Architect, asistente industrial de RPK NEXUS con acceso a base de datos.
+
+Schema disponible:
+{schema}
+
+INSTRUCCIONES:
+1. Si la pregunta requiere datos, escribe primero la SQL entre etiquetas <SQL> y </SQL>.
+2. Luego escribe una respuesta breve en español (max 3 lineas) usando los datos que se te proporcionaran.
+3. Si no hay SQL necesaria, responde directamente sin etiquetas.
+4. Usa busquedas exactas con LIKE cuando busques articulos o centros.
+5. Agrega LIMIT 15 salvo que consultes agregados.
+
+Pregunta: {pregunta}
+{contexto_datos}"""
+
+def llamar_ollama_optimizado(pregunta: str, datos_extra: str = "", timeout: int = 90) -> tuple[str, str]:
+    """
+    Llama UNA SOLA VEZ a Qwen2.5. Devuelve (sql_extraida, respuesta_narrativa).
+    Mantiene el modelo en RAM con keep_alive=600s entre consultas.
+    """
+    import urllib.request, json, re
+    
+    contexto = f"\nDatos de la consulta anterior: {datos_extra}" if datos_extra else ""
+    prompt_final = PROMPT_UNICO.format(
+        schema=NEXUS_SCHEMA,
+        pregunta=pregunta,
+        contexto_datos=contexto
+    )
+    
+    payload = json.dumps({
+        "model": "qwen2.5-coder:7b",
+        "prompt": f"<|im_start|>system\nSigue las instrucciones exactamente.<|im_end|>\n<|im_start|>user\n{prompt_final}<|im_end|>\n<|im_start|>assistant\n",
+        "stream": False,
+        "keep_alive": "10m",   # Mantener modelo en RAM 10 minutos
+        "options": {
+            "temperature": 0.05,
+            "num_predict": 300,    # Reducido de 512 a 300 para SQL+respuesta
+            "top_p": 0.9,
+            "repeat_penalty": 1.1
+        }
+    }).encode('utf-8')
+    
+    req = urllib.request.Request(
+        "http://localhost:11434/api/generate",
+        data=payload,
+        headers={"Content-Type": "application/json"}
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        raw = json.loads(resp.read().decode()).get("response", "").strip()
+    
+    # Extraer SQL si existe
+    sql_match = re.search(r'<SQL>(.*?)</SQL>', raw, re.DOTALL | re.IGNORECASE)
+    sql = sql_match.group(1).strip() if sql_match else ""
+    
+    # La respuesta narrativa es el texto sin la etiqueta SQL
+    respuesta = re.sub(r'<SQL>.*?</SQL>', '', raw, flags=re.DOTALL).strip()
+    
+    return sql, respuesta
+
+def prewarm_ollama():
+    """Precalienta Qwen en RAM al arrancar el servidor para eliminar cold start."""
+    import urllib.request, json, threading
+    def _warm():
+        try:
+            payload = json.dumps({
+                "model": "qwen2.5-coder:7b",
+                "prompt": "Hola",
+                "stream": False,
+                "keep_alive": "10m",
+                "options": {"num_predict": 1}
+            }).encode('utf-8')
+            req = urllib.request.Request(
+                "http://localhost:11434/api/generate",
+                data=payload,
+                headers={"Content-Type": "application/json"}
+            )
+            urllib.request.urlopen(req, timeout=120)
+            print("[QWEN] Modelo precalentado en RAM. Primera consulta sera rapida.")
+        except Exception as e:
+            print(f"[QWEN] Prewarm fallido (Ollama no activo): {e}")
+    threading.Thread(target=_warm, daemon=True).start()
+
+# Precalentar el modelo al cargar el módulo
+prewarm_ollama()
 
 @app.post("/api/v1/chat")
 async def post_chat(req: ChatRequest):
+    pregunta = req.text.strip()
+    sid = req.session_id or "default"
+
+    if req.limpiar_historial:
+        nexus_memoria.clear(sid)
+
+    # ── Guardar mensaje del usuario en memoria ────────────────────────────────
+    nexus_memoria.add(sid, "user", pregunta)
+
+    import urllib.request
+    import urllib.error
+
     try:
-        pregunta = req.text
-        sql = traducir_a_sql(pregunta)
-        resultados, columnas = ejecutar_consulta(sql)
+        adk_base = "http://localhost:8004"
+        appName = "Quen_Arquitecto"
+        userId = "nexus_user"
+
+        session_req = urllib.request.Request(
+            f"{adk_base}/apps/{appName}/users/{userId}/sessions",
+            data=json.dumps({"appName": appName, "userId": userId}).encode("utf-8"),
+            headers={"Content-Type": "application/json"}
+        )
+        with urllib.request.urlopen(session_req, timeout=10) as res:
+            session_data = json.loads(res.read().decode("utf-8"))
+            session_id = session_data.get("id")
+
+        payload = {
+            "newMessage": {"parts": [{"text": pregunta}]},
+            "appName": appName,
+            "userId": userId,
+            "sessionId": session_id,
+            "streaming": False
+        }
         
-        if not resultados:
-            return {"response": "No encontré datos específicos sobre eso. Prueba preguntando por 'stock total' o 'carga de trabajo'."}
-            
-        # Formatear respuesta amigable
-        respuesta = f"He consultado la base de datos NEXUS.\n\n"
-        if len(resultados) == 1:
-            row = dict(zip(columnas, resultados[0]))
-            detalles = "\n".join([f"- **{k}**: {v}" for k, v in row.items()])
-            respuesta += f"Los datos que he encontrado son:\n{detalles}"
-        else:
-            respuesta += f"He encontrado {len(resultados)} registros que coinciden. Aquí tienes los primeros 5:\n"
-            for r in resultados[:5]:
-                respuesta += f"- {dict(zip(columnas, r))}\n"
-                
-        return {"response": respuesta}
+        req_ol = urllib.request.Request(
+            f"{adk_base}/run",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"}
+        )
+        
+        with urllib.request.urlopen(req_ol, timeout=180) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            # El ADK Synchronous RunAgentResponse devuelve "message" con el Content object
+            if "message" in data and "content" in data["message"] and "parts" in data["message"]["content"]:
+                respuesta_txt = data["message"]["content"]["parts"][0].get("text", "")
+            else:
+                respuesta_txt = "No obtuve respuesta del agente ADK."
+        
+        nexus_memoria.add(sid, "assistant", respuesta_txt)
+        artifact_url = None
+        if len(respuesta_txt) > 300 and ("informe" in pregunta.lower() or "analiz" in pregunta.lower() or "resum" in pregunta.lower()):
+            artifact_url = _guardar_artifact(pregunta, respuesta_txt)
+        
+        resp_json = {"response": f"🧠 *[Quen Architect · ADK v5.7]*\n\n{respuesta_txt}"}
+        if artifact_url:
+            resp_json["artifact"] = artifact_url
+        return resp_json
+
     except Exception as e:
-        return {"response": f"Lo siento, Ismael. Ha ocurrido un error al procesar tu consulta: {str(e)}"}
+        print(f"[CHAT] Error conectando con ADK: {e}")
+        return {"response": f"Error ADK: {str(e)}"}
+
+
+def _guardar_artifact(pregunta: str, contenido: str) -> str:
+    """Guarda un artifact MD y devuelve la URL relativa."""
+    import re
+    from datetime import datetime
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    nombre = re.sub(r'\W+', '_', pregunta[:30]).strip('_').lower()
+    artifacts_dir = Path(r"C:\Proyectos_IA\Quen_Arquitecto\.adk\artifacts")
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    ruta = artifacts_dir / f"{nombre}_{ts}.md"
+    ruta.write_text(f"# Análisis: {pregunta}\n\n{contenido}\n\n---\n*Generado por Quen Architect · {datetime.now().strftime('%d/%m/%Y %H:%M')}*",
+                    encoding="utf-8")
+    print(f"[ARTIFACT] Guardado: {ruta.name}")
+    return f"/api/v1/artifact/{ruta.name}"
+
+
+@app.post("/api/v1/chat/stream")
+async def post_chat_stream(req: ChatRequest):
+    """
+    Endpoint de streaming SSE: devuelve tokens de Qwen en tiempo real.
+    El frontend recibe texto letra a letra en lugar de esperar la respuesta completa.
+    """
+    pregunta = req.text.strip()
+    sid = req.session_id or "default"
+    nexus_memoria.add(sid, "user", pregunta)
+    
+    contexto_rag     = nexus_rag.get_context_for_query(pregunta)
+    contexto_memoria = nexus_memoria.format_for_prompt(sid)
+    pregunta_full    = pregunta + contexto_memoria + contexto_rag
+
+    async def event_stream():
+        import urllib.request
+        import urllib.error
+
+        # Paso 1: notificar que estamos pensando
+        yield f"data: {json.dumps({'status': 'thinking', 'msg': 'Contactando al Agente ADK...'})}\n\n"
+        await asyncio.sleep(0)
+        
+        adk_base = "http://localhost:8004"
+        appName = "Quen_Arquitecto"
+        userId = "nexus_user"
+
+        try:
+            # Crear o recuperar sesión ADK
+            session_req = urllib.request.Request(
+                f"{adk_base}/apps/{appName}/users/{userId}/sessions",
+                data=json.dumps({"appName": appName, "userId": userId}).encode("utf-8"),
+                headers={"Content-Type": "application/json"}
+            )
+            with urllib.request.urlopen(session_req, timeout=10) as res:
+                session_data = json.loads(res.read().decode("utf-8"))
+                session_id = session_data.get("id")
+            
+            # Llamar a run_sse del ADK
+            yield f"data: {json.dumps({'status': 'query', 'msg': 'Agente analizando herramientas...'})}\n\n"
+            await asyncio.sleep(0)
+
+            payload = {
+                "newMessage": {"parts": [{"text": pregunta}]},
+                "appName": appName,
+                "userId": userId,
+                "sessionId": session_id,
+                "streaming": True
+            }
+            
+            req_ol = urllib.request.Request(
+                f"{adk_base}/run_sse",
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"}
+            )
+            
+            full_response = ""
+            yield f"data: {json.dumps({'status': 'streaming', 'msg': 'Generando respuesta...'})}\n\n"
+            await asyncio.sleep(0)
+
+            with urllib.request.urlopen(req_ol, timeout=180) as resp:
+                for line in resp:
+                    if line:
+                        line_str = line.decode("utf-8").strip()
+                        if line_str.startswith("data: "):
+                            data_str = line_str[6:]
+                            try:
+                                data = json.loads(data_str)
+                                if "content" in data and "parts" in data["content"]:
+                                    text = data["content"]["parts"][0].get("text", "")
+                                    if text:
+                                        if data.get("partial", True):
+                                            full_response += text
+                                            yield f"data: {json.dumps({'token': text})}\n\n"
+                            except Exception as e:
+                                pass
+                                
+            # Guardar en memoria de UI original y cerrar
+            nexus_memoria.add(sid, "assistant", full_response)
+            yield f"data: {json.dumps({'status': 'done', 'full': full_response})}\n\n"
+
+        except Exception as e:
+            yield f"data: {json.dumps({'status': 'error', 'msg': f'Error conectando con ADK: {e}'})}\n\n"
+            return
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.get("/api/v1/alertas")
+async def get_alertas():
+    """Devuelve las alertas proactivas generadas al arrancar."""
+    return {"status": "success", "data": nexus_alertas.get_alertas()}
+
+
+@app.get("/api/v1/rag/status")
+async def get_rag_status():
+    """Estado de todos los motores IA."""
+    return {"status": "success", "data": {
+        "rag": nexus_rag.status(),
+        "memoria": nexus_memoria.stats(),
+        "alertas": nexus_alertas.get_alertas().get("total", 0)
+    }}
 
 @app.get("/api/v1/hub_stats")
 async def get_hub_stats():
@@ -334,6 +605,33 @@ async def get_hub_stats():
             "cobertura": 12.4,
             "error": str(e)
         }
+
+@app.get("/api/v1/artifacts")
+async def get_artifacts():
+    try:
+        # Ruta a los artefactos del agente
+        art_path = Path(r"C:\Proyectos_IA\Quen_Arquitecto\.adk\artifacts")
+        if not art_path.exists():
+            return {"artifacts": []}
+            
+        files = []
+        for f in art_path.glob("*.*"):
+            if f.suffix in ['.md', '.json', '.html', '.txt']:
+                files.append({
+                    "name": f.name,
+                    "date": datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d %H:%M"),
+                    "size": f.stat().st_size
+                })
+        return {"artifacts": sorted(files, key=lambda x: x['date'], reverse=True)}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/api/v1/artifact/{filename}")
+async def get_artifact_content(filename: str):
+    path = Path(r"C:\Proyectos_IA\Quen_Arquitecto\.adk\artifacts") / filename
+    if not path.exists():
+        raise HTTPException(status_code=404)
+    return FileResponse(path)
 
 @app.get("/api/fechas")
 async def get_dates(request: Request):
@@ -545,6 +843,76 @@ async def debug_objectives():
     res = query_duckdb("SELECT Articulo, Stock_Objetivo FROM existencias WHERE Stock_Objetivo > 0 LIMIT 20")
     if isinstance(res, dict) and 'warning' in res: return {"objectives_sample": []}
     return {"objectives_sample": [dict(r) for r in res]}
+
+# --- ENDPOINTS ESPECIFICOS DE OCUPACION ---
+
+@app.get("/api/ocupacion/summary")
+async def get_ocupacion_summary(request: Request, fecha_inicio: str = None, fecha_fin: str = None, tipo: str = None):
+    latest = query_duckdb("SELECT MAX(Fecha_Snapshot) as f FROM ocupacion", one=True)
+    if not latest or 'warning' in latest:
+        return {"kpis": {"total": 0, "ocupadas": 0, "vacias": 0, "pct_ocupacion": 0}, "evolucion": {"fechas":[], "pct_ocupacion":[]}, "warning": "Using stale data"}
+        
+    actual_latest = fecha_fin if fecha_fin else latest['f']
+    
+    # KPIs for the latest date
+    q_kpi = "SELECT Vacia, COUNT(*) as cnt FROM ocupacion WHERE Fecha_Snapshot = ?"
+    params_kpi = [actual_latest]
+    if tipo:
+        q_kpi += " AND Tipo_Ubicacion = ?"
+        params_kpi.append(tipo)
+    q_kpi += " GROUP BY Vacia"
+    
+    kpis_raw = query_duckdb(q_kpi, tuple(params_kpi))
+    
+    vacias = sum([r['cnt'] for r in kpis_raw if r['Vacia'] == 'S']) if kpis_raw else 0
+    ocupadas = sum([r['cnt'] for r in kpis_raw if r['Vacia'] == 'N']) if kpis_raw else 0
+    total = vacias + ocupadas
+    pct = (ocupadas / total * 100) if total > 0 else 0
+    
+    # Evolution
+    q_evol = "SELECT Fecha_Snapshot, Vacia, COUNT(*) as cnt FROM ocupacion WHERE 1=1"
+    params_evol = []
+    if fecha_inicio:
+         q_evol += " AND Fecha_Snapshot >= ?"
+         params_evol.append(fecha_inicio)
+    if fecha_fin:
+         q_evol += " AND Fecha_Snapshot <= ?"
+         params_evol.append(fecha_fin)
+    if tipo:
+         q_evol += " AND Tipo_Ubicacion = ?"
+         params_evol.append(tipo)
+    q_evol += " GROUP BY Fecha_Snapshot, Vacia ORDER BY Fecha_Snapshot"
+    
+    evol_raw = query_duckdb(q_evol, tuple(params_evol))
+    
+    evol_dict = {}
+    if evol_raw:
+        for r in evol_raw:
+            f = str(r['Fecha_Snapshot']).split(' ')[0]
+            if f not in evol_dict:
+                 evol_dict[f] = {'S': 0, 'N': 0}
+            evol_dict[f][r['Vacia']] = r['cnt']
+            
+    fechas = sorted(list(evol_dict.keys()))
+    pct_evol = []
+    for f in fechas:
+         t = evol_dict[f]['S'] + evol_dict[f]['N']
+         pct_evol.append(round((evol_dict[f]['N'] / t * 100) if t > 0 else 0, 1))
+         
+    return {
+         "kpis": {
+             "total": total,
+             "ocupadas": ocupadas,
+             "vacias": vacias,
+             "pct_ocupacion": round(pct, 1)
+         },
+         "evolucion": {
+             "fechas": fechas,
+             "pct_ocupacion": pct_evol
+         },
+         "ultima_fecha": str(actual_latest).split(' ')[0]
+    }
+
 
 # --- ENDPOINTS ESPECIFICOS DE TIEMPOS ---
 
