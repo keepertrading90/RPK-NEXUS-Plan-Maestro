@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 
 # Configuración de rutas para RPK NEXUS
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-EXCEL_PATH = os.path.join(BASE_DIR, "MAESTRO FLEJE_v1.xlsx")
+EXCEL_PATH = os.path.join(BASE_DIR, "db", "MAESTRO FLEJE.xlsx")
 
 try:
     from backend.db import models_sim as database
@@ -83,6 +83,141 @@ def get_base_dataframe():
         _df_cache['centro_original'] = _df_cache['Centro']
         
     return _df_cache.copy()
+
+def _log_pending_excel_update(msg: str):
+    try:
+        pending_file = os.path.join(BASE_DIR, "data_lake", "pending_excel_updates.json")
+        if not os.path.exists(os.path.dirname(pending_file)):
+            os.makedirs(os.path.dirname(pending_file), exist_ok=True)
+        import json
+        event = {"timestamp": datetime.now().isoformat(), "msg": msg}
+        with open(pending_file, "a") as f:
+            f.write(json.dumps(event) + "\n")
+    except:
+        pass
+
+def add_article(data: dict) -> dict:
+    import openpyxl
+    df = get_base_dataframe()
+    if df is None:
+        return {"status": "error", "message": "No se pudo cargar el origen de datos."}
+
+    articulo = str(data.get("articulo")).strip()
+    centro = str(data.get("centro")).strip()
+    
+    mask = (df['Articulo'].astype(str) == articulo) & (df['Centro'].astype(str) == centro)
+    if not df[mask].empty:
+        return {"status": "error", "message": f"El artículo {articulo} ya existe en el centro {centro}."}
+
+    # Parámetros por si queremos reescribir la fila entera correctamente en Excel
+    dias_lab = float(data.get("dias_laborales", 238))
+    vol_anual = float(data.get("volumen_anual", 0))
+    ppm = float(data.get("piezas_por_minuto", 0))
+    oee = float(data.get("oee", 0.75))
+
+    # Nueva fila de Pandas para la Caché en vivo
+    nueva_fila = {
+        'Articulo': articulo,
+        'Centro': centro,
+        'Volumen anual': vol_anual,
+        'Piezas por minuto': ppm,
+        '%OEE': oee,
+        'dias laborales 2026': dias_lab,
+        'Setup (h)': 0.0,
+        'Ratio_MOD': 1.0,
+        'centro_original': centro
+    }
+    
+    # 1. Update in-memory DB and pickle cache
+    global _df_cache
+    _df_cache = pd.concat([_df_cache, pd.DataFrame([nueva_fila])], ignore_index=True)
+    try:
+        _df_cache.to_pickle(EXCEL_PATH + ".cache.pkl")
+    except:
+        pass
+
+    # 2. Try updating the physical Excel via appending
+    try:
+        pph = ppm * 60
+        ppd_16 = pph * 16
+        ppd_24 = pph * 24
+        ppd_oee_24 = ppd_24 * oee
+        ppd_oee_16 = ppd_16 * oee
+        pps_24 = ppd_24 * 5
+        pps_16 = ppd_16 * 5
+
+        wb = openpyxl.load_workbook(EXCEL_PATH)
+        ws = wb.active
+        # Mismo orden que el Excel Maestro original RPK NEXUS v5.5
+        new_row = [dias_lab, articulo, float(centro), vol_anual, ppm, pph, ppd_16, ppd_24, ppd_oee_24, ppd_oee_16, pps_24, pps_16, oee]
+        ws.append(new_row)
+        wb.save(EXCEL_PATH)
+        wb.close()
+        return {"status": "success", "message": "Memoria y Excel actualizados correctamente."}
+        
+    except PermissionError:
+        print("[WARN] Excel bloqueado al añadir. Escribiendo en pending.")
+        _log_pending_excel_update(f"ADD: {articulo} en {centro}")
+        return {"status": "warning", "message": "Memoria actualizada, pero Excel maestro está bloqueado. Se sincronizará más tarde."}
+    except Exception as e:
+        print(f"[ERROR] add_article excel mutator: {e}")
+        return {"status": "warning", "message": f"Memoria actualizada. Error archivo físico: {str(e)}"}
+
+def delete_article(articulo: str, centro: str) -> dict:
+    import openpyxl
+    df = get_base_dataframe()
+    if df is None:
+        return {"status": "error", "message": "No se pudo cargar el origen de datos."}
+        
+    articulo = str(articulo).strip()
+    centro = str(centro).strip()
+    
+    mask = (df['Articulo'].astype(str) == articulo) & (df['Centro'].astype(str) == centro)
+    if not mask.any():
+        return {"status": "error", "message": f"Artículo no encontrado ({articulo} en {centro})."}
+        
+    # 1. Update in-memory DB and pickle cache
+    global _df_cache
+    _df_cache = df[~mask].copy()
+    try:
+        _df_cache.to_pickle(EXCEL_PATH + ".cache.pkl")
+    except:
+        pass
+
+    # 2. Try updating the physical Excel via row removal
+    try:
+        wb = openpyxl.load_workbook(EXCEL_PATH)
+        ws = wb.active
+        
+        # Encontrar la fila a eliminar (leyendo los valores A=Dias, B=Articulo, C=Centro...)
+        row_to_delete = None
+        for row in range(2, ws.max_row + 1):
+            art_val = str(ws.cell(row=row, column=2).value).strip()
+            cen_val = str(ws.cell(row=row, column=3).value).strip()
+            
+            # Limpieza básica para emparejar
+            art_val = art_val.replace('.0', '')
+            cen_val = cen_val.replace('.0', '')
+            
+            if art_val == articulo and cen_val == centro:
+                row_to_delete = row
+                break
+                
+        if row_to_delete is not None:
+            ws.delete_rows(row_to_delete, 1)
+            wb.save(EXCEL_PATH)
+            
+        wb.close()
+        return {"status": "success", "message": "Memoria y Excel actualizados correctamente."}
+        
+    except PermissionError:
+        print("[WARN] Excel bloqueado al eliminar. Escribiendo en pending.")
+        _log_pending_excel_update(f"DELETE: {articulo} en {centro}")
+        return {"status": "warning", "message": "Memoria actualizada, pero Excel maestro está bloqueado. Se sincronizará más tarde."}
+    except Exception as e:
+        print(f"[ERROR] delete_article excel mutator: {e}")
+        return {"status": "warning", "message": f"Memoria actualizada. Error archivo físico: {str(e)}"}
+
 
 @time_it
 def calculate_saturation(df: pd.DataFrame, dias_laborales_override: int = None, horas_turno_default: int = 16):

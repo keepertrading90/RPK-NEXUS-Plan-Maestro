@@ -246,7 +246,9 @@ function renderTable(detail) {
     let filtered = detail;
     if (search) filtered = filtered.filter(d => d.Articulo.toString().toLowerCase().includes(search));
 
-    body.innerHTML = filtered.slice(0, 100).map(d => {
+    body.innerHTML = filtered.map(d => {
+        const hasMissingData = !d['Piezas por minuto'] || !d['Volumen anual'];
+
         const sat = (d.Saturacion * 100).toFixed(1);
         const satClass = sat > 85 ? 'pill-high' : (sat > 70 ? 'pill-mid' : 'pill-low');
         const impact = totalGroupDemand > 0 ? ((d['Volumen anual'] / totalGroupDemand) * 100).toFixed(1) : 0;
@@ -258,14 +260,17 @@ function renderTable(detail) {
         else if (shifts == 24) shiftLabel = "3 Turnos (24h)";
 
         return `
-            <tr>
-                <td><strong>${d.Articulo}</strong></td>
+            <tr ${hasMissingData ? 'style="background-color: rgba(255, 165, 0, 0.05);"' : ''}>
+                <td>
+                    <strong>${d.Articulo}</strong>
+                    ${hasMissingData ? '<span style="color: #fbbf24; cursor: help; margin-left: 4px;" title="Aviso: Falta Piezas por Minuto o Volumen Anual en el Excel Maestro">⚠️</span>' : ''}
+                </td>
                 <td class="text-center">
                     <span class="center-tag">${d.Centro}</span>
                     <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 4px;">${shiftLabel}</div>
                 </td>
-                <td class="text-right">${d['Volumen anual'].toLocaleString()}</td>
-                <td class="text-right">${Math.round(d['Piezas por minuto'])}</td>
+                <td class="text-right ${!d['Volumen anual'] ? 'text-warning' : ''}">${(d['Volumen anual'] || 0).toLocaleString()}</td>
+                <td class="text-right ${!d['Piezas por minuto'] ? 'text-warning' : ''}">${Math.round(d['Piezas por minuto'] || 0)}</td>
                 <td class="text-right">${(d['%OEE'] * 100).toFixed(1)}%</td>
                 <td class="text-center">
                     <span class="saturation-pill ${satClass}">${sat}%</span>
@@ -283,11 +288,16 @@ function renderTable(detail) {
                     <div class="impact-bar-container"><div class="impact-bar" style="width: ${impact}%"></div></div>
                     <span style="font-size:0.75rem; color:var(--text-muted)">${impact}%</span>
                 </td>
-                <td class="text-center">
+                <td class="text-center" style="white-space: nowrap;">
                     <button class="secondary-btn btn-simular" 
                         style="padding: 0.3rem 0.6rem; font-size: 0.7rem;"
                         data-articulo="${d.Articulo}" 
                         data-centro="${d.Centro}">Ajustar</button>
+                    <button class="secondary-btn btn-delete-art" 
+                        style="padding: 0.3rem 0.4rem; font-size: 0.8rem; background: transparent; border: 1px solid #555; color: #888; cursor: pointer; margin-left: 4px;"
+                        data-articulo="${d.Articulo}" 
+                        data-centro="${d.centro_original || d.Centro}"
+                        title="Eliminar artículo">🗑️</button>
                 </td>
             </tr>
         `;
@@ -657,6 +667,10 @@ function setupEventListeners() {
                 return;
             }
             openEditModal(e.target.getAttribute('data-articulo'), e.target.getAttribute('data-centro'));
+        }
+        if (e.target.classList.contains('btn-delete-art') || e.target.closest('.btn-delete-art')) {
+            const btn = e.target.classList.contains('btn-delete-art') ? e.target : e.target.closest('.btn-delete-art');
+            openDeleteConfirmModal(btn.getAttribute('data-articulo'), btn.getAttribute('data-centro'));
         }
     };
 
@@ -1907,3 +1921,138 @@ async function downloadScenarioPDF() {
         setLoading(false);
     }
 }
+
+// ============================================================
+// GESTIÓN DE ARTÍCULOS (CRUD - Persistencia en Excel Maestro)
+// ============================================================
+
+function openNewArticleModal() {
+    // Populate centro dropdown with existing centers
+    const centers = currentData?.detail
+        ? [...new Set(currentData.detail.map(d => d.Centro))].sort()
+        : [];
+    const centroSelect = document.getElementById('new-art-centro');
+    centroSelect.innerHTML = centers.map(c => `<option value="${c}">${c}</option>`).join('');
+
+    // Reset form
+    document.getElementById('new-art-code').value = '';
+    document.getElementById('new-art-demanda').value = '0';
+    document.getElementById('new-art-ppm').value = '0';
+    document.getElementById('new-art-oee').value = '75';
+    document.getElementById('new-art-dias').value = '238';
+
+    document.getElementById('new-article-modal').style.display = 'flex';
+}
+
+async function submitNewArticle(e) {
+    e.preventDefault();
+
+    const articulo = document.getElementById('new-art-code').value.trim();
+    const centro = document.getElementById('new-art-centro').value;
+    const volumen_anual = parseFloat(document.getElementById('new-art-demanda').value) || 0;
+    const piezas_por_minuto = parseFloat(document.getElementById('new-art-ppm').value) || 0;
+    const oee = (parseFloat(document.getElementById('new-art-oee').value) || 75) / 100;
+    const dias_laborales = parseFloat(document.getElementById('new-art-dias').value) || 238;
+
+    if (!articulo) {
+        alert('El código de artículo es obligatorio.');
+        return;
+    }
+
+    setLoading(true);
+    try {
+        const res = await fetch(`${API_BASE}/articulos/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ articulo, centro, volumen_anual, piezas_por_minuto, oee, dias_laborales })
+        });
+
+        const result = await res.json();
+
+        if (!res.ok) {
+            alert('Error: ' + (result.detail || result.message || 'Error desconocido'));
+            return;
+        }
+
+        if (result.status === 'warning') {
+            alert('Aviso: ' + result.message);
+        }
+
+        document.getElementById('new-article-modal').style.display = 'none';
+
+        // Reload simulation to reflect the new article
+        localOverrides = [];
+        await loadSimulation(currentScenarioId);
+
+    } catch (error) {
+        console.error('Error creando artículo:', error);
+        alert('Error de conexión al crear el artículo.');
+    } finally {
+        setLoading(false);
+    }
+}
+
+let pendingDeleteArticulo = null;
+let pendingDeleteCentro = null;
+
+function openDeleteConfirmModal(articulo, centro) {
+    pendingDeleteArticulo = articulo;
+    pendingDeleteCentro = centro;
+    document.getElementById('delete-art-name').textContent = articulo;
+    document.getElementById('delete-art-centro').textContent = centro;
+    document.getElementById('delete-confirm-modal').style.display = 'flex';
+}
+
+async function confirmDeleteArticle() {
+    if (!pendingDeleteArticulo || !pendingDeleteCentro) return;
+
+    setLoading(true);
+    try {
+        const deleteUrl = `${API_BASE}/articulos/${encodeURIComponent(pendingDeleteArticulo)}?centro=${encodeURIComponent(pendingDeleteCentro)}`;
+        const res = await fetch(deleteUrl, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const result = await res.json();
+
+        if (!res.ok) {
+            alert('Error: ' + (result.detail || result.message || 'Error desconocido'));
+            return;
+        }
+
+        if (result.status === 'warning') {
+            alert('Aviso: ' + result.message);
+        }
+
+        document.getElementById('delete-confirm-modal').style.display = 'none';
+
+        // Remove any local overrides for this article
+        localOverrides = localOverrides.filter(
+            o => !(String(o.articulo) === String(pendingDeleteArticulo) && String(o.centro) === String(pendingDeleteCentro))
+        );
+
+        // Reload simulation
+        await loadSimulation(currentScenarioId);
+
+    } catch (error) {
+        console.error('Error eliminando artículo:', error);
+        alert('Error de conexión al eliminar el artículo.');
+    } finally {
+        setLoading(false);
+        pendingDeleteArticulo = null;
+        pendingDeleteCentro = null;
+    }
+}
+
+// Wire up the new-article form and delete-confirm button
+document.addEventListener('DOMContentLoaded', () => {
+    const newArtForm = document.getElementById('new-article-form');
+    if (newArtForm) {
+        newArtForm.addEventListener('submit', submitNewArticle);
+    }
+    const deleteBtn = document.getElementById('btn-confirm-delete');
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', confirmDeleteArticle);
+    }
+});

@@ -70,28 +70,19 @@
                     <p>KPIs financieros, análisis de clientes y evolución histórica de expediciones.</p>
                     <a href="/mod/albaranes" class="btn-launch">Abrir Dashboard</a>
                 </div>
+                <!-- NUEVO MODULO OCUPACION -->
+                <div class="module-box" style="border-left: 4px solid var(--rpk-red)">
+                    <h2>🏭 Ocupación Almacén</h2>
+                    <p>Análisis de nivel de ocupación de Producto Terminado y Materia Prima.</p>
+                    <a href="/mod/ocupacion" class="btn-launch">Abrir Dashboard</a>
+                </div>
             </div>
         </main>
 
-        <!-- Gemini Assistant Popup -->
-        <div class="chat-trigger" onclick="toggleChat()">
+        <!-- Botón flotante IA: navega al panel completo -->
+        <a class="chat-trigger" href="/mod/ia_agents" title="Abrir Central de Agentes IA" style="background: var(--rpk-red); box-shadow: 0 4px 20px rgba(227, 6, 19, 0.5); border: 2px solid rgba(255,255,255,0.3); text-decoration: none; display: flex; align-items: center; justify-content: center;">
             🤖
-        </div>
-
-        <div class="chat-popup" id="chatPopup">
-            <div class="chat-header">
-                <strong>Nexus Assistant</strong>
-                <span style="cursor:pointer" onclick="toggleChat()">✕</span>
-            </div>
-            <div class="chat-body" id="chatBody">
-                <p style="color:var(--text-muted)">Hola Ismael, soy el asistente NEXUS. ¿En qué puedo ayudarte hoy?</p>
-            </div>
-            <div class="chat-input-area">
-                <input type="text" class="chat-input" id="chatInput" placeholder="Pregunta algo..."
-                    onkeypress="handleKey(event)">
-                <button class="btn-send" onclick="sendMessage()">➤</button>
-            </div>
-        </div>
+        </a>
     </div>
 
     <script>
@@ -100,45 +91,11 @@
             .then(r => r.json())
             .then(data => {
                 if (data.error) return;
-                // 1. Stock (Pzs)
                 document.getElementById('stock-val').innerText = data.stock.total.toLocaleString();
-                // 2. Saturación Media
                 document.getElementById('sat-val').innerText = data.saturation + '%';
-                // 3. Cobertura
                 document.getElementById('cob-val').innerText = data.cobertura;
             });
-
-        function toggleChat() {
-            document.getElementById('chatPopup').classList.toggle('active');
-        }
-
-        function handleKey(e) {
-            if (e.key === 'Enter') sendMessage();
-        }
-
-        async function sendMessage() {
-            const input = document.getElementById('chatInput');
-            const body = document.getElementById('chatBody');
-            const text = input.value.trim();
-            if (!text) return;
-
-            // User msg
-            body.innerHTML += `<p style="margin-top:10px"><strong>Tú:</strong> ${text}</p>`;
-            input.value = '';
-
-            // API Call
-            const res = await fetch('/api/v1/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: text })
-            });
-            const data = await res.json();
-
-            // Nexus response
-            body.innerHTML += `<p style="margin-top:10px; color:var(--rpk-red); white-space: pre-wrap;"><strong>Nexus:</strong> ${data.response}</p>`;
-            body.scrollTop = body.scrollHeight;
-        }
     </script>
 </body>
 
-</html>
+</html>

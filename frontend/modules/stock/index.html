@@ -438,6 +438,14 @@
                             style="display: flex; align-items: center; gap: 8px;">
                             📄 Reporte PDF
                         </button>
+                        <button class="btn" onclick="openAdvancedPdfModal()"
+                            style="display: flex; align-items: center; gap: 8px; background: #1a1a1a; border: 1px solid var(--rpk-red);">
+                            🏆 Informe Avanzado
+                        </button>
+                        <button class="btn" onclick="openObjectivesPdfModal()"
+                            style="display: flex; align-items: center; gap: 8px; background: #1a1a1a; border: 1px solid #3B5924;">
+                            🎯 Análisis Objetivos
+                        </button>
                     </div>
                     <div style="display: flex; gap: 10px; align-items: center;">
                         <a href="/api/debug/objectives" target="_blank"
@@ -585,7 +593,7 @@
     </div>
 
     <!-- Modal para Reporte PDF -->
-    <div id="pdfModal" class="modal">
+    <div id="pdfModal" class="modal" style="display: none; z-index: 10001;">
         <div class="modal-content" style="max-width: 500px;">
             <span class="close-modal" onclick="closePdfModal()">&times;</span>
             <div class="modal-header">
@@ -611,6 +619,76 @@
                 <span id="pdf-btn-text">Descargar Documento</span>
                 <div id="pdf-loader" class="loader"
                     style="width: 20px; height: 20px; border-width: 2px; display: none;"></div>
+            </button>
+        </div>
+    </div>
+
+    <!-- Modal para INFORME AVANZADO (Filtros masivos) -->
+    <div id="advancedPdfModal" class="modal" style="display: none; z-index: 10002;">
+        <div class="modal-content" style="max-width: 600px; border: 2px solid var(--rpk-red); padding: 30px; border-radius: 12px; position: relative;">
+            <span class="close-modal" onclick="closeAdvancedPdfModal()">&times;</span>
+            <div class="modal-header" style="margin-bottom: 25px;">
+                <div class="modal-title" style="color: var(--rpk-red); font-size: 1.8rem; font-weight: bold;">Informe Estratégico de Stock</div>
+                <div class="modal-subtitle" style="color: var(--text-muted);">Análisis de Evolución, Pareto y Desviación de Objetivos</div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+                <div class="filter-group">
+                    <span class="filter-label" style="display: block; margin-bottom: 5px; font-size: 0.9rem;">Fecha Inicial</span>
+                    <input type="date" id="adv-pdf-start" style="width: 100%; padding: 10px; background: #222; border: 1px solid #444; color: white; border-radius: 6px;">
+                </div>
+                <div class="filter-group">
+                    <span class="filter-label" style="display: block; margin-bottom: 5px; font-size: 0.9rem;">Fecha Final</span>
+                    <input type="date" id="adv-pdf-end" style="width: 100%; padding: 10px; background: #222; border: 1px solid #444; color: white; border-radius: 6px;">
+                </div>
+            </div>
+
+            <div class="filter-group" style="margin-bottom: 15px;">
+                <span class="filter-label" style="display: block; margin-bottom: 5px; font-size: 0.9rem;">Cliente Particular</span>
+                <select id="adv-pdf-client" style="background: #222; border: 1px solid #444; color: white; padding: 10px; border-radius: 6px; width: 100%;">
+                    <option value="ALL">Todo el Portafolio (Pareto Global)</option>
+                </select>
+            </div>
+
+            <div class="filter-group" style="margin-bottom: 25px;">
+                <span class="filter-label" style="display: block; margin-bottom: 5px; font-size: 0.9rem;">Filtro por Artículo (Opcional)</span>
+                <input type="text" id="adv-pdf-article" placeholder="Ej: 421654" style="background: #222; border: 1px solid #444; color: white; padding: 10px; border-radius: 6px; width: 100%;">
+            </div>
+
+            <button class="btn" onclick="downloadAdvancedPdf()" style="width: 100%; padding: 15px; font-size: 1.1rem; background: var(--rpk-red); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold;">
+                GENERAR INFORME PROFESIONAL
+                <div id="adv-pdf-loader" class="loader" style="width: 18px; height: 18px; border: 2px solid #fff; border-top: 2px solid transparent; border-radius: 50%; display: none; margin-left: 10px; animation: spin 1s linear infinite;"></div>
+            </button>
+        </div>
+    <div id="objectivesPdfModal" class="modal" style="display: none; z-index: 10003;">
+        <div class="modal-content" style="max-width: 500px; border: 2px solid #3B5924; border-radius: 12px; padding: 25px;">
+            <span class="close-modal" onclick="closeObjectivesPdfModal()">&times;</span>
+            <div class="modal-header" style="margin-bottom: 20px;">
+                <div class="modal-title" style="color: #3B5924; font-size: 1.5rem;">Análisis de Cumplimiento</div>
+                <div class="modal-subtitle">Comparativa Media vs Stock Objetivo</div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+                <div class="filter-group">
+                    <span class="filter-label" style="font-size: 0.8rem;">Desde</span>
+                    <input type="date" id="obj-pdf-start" style="width: 100%; padding: 8px; background: #222; border: 1px solid #444; color: white;">
+                </div>
+                <div class="filter-group">
+                    <span class="filter-label" style="font-size: 0.8rem;">Hasta</span>
+                    <input type="date" id="obj-pdf-end" style="width: 100%; padding: 8px; background: #222; border: 1px solid #444; color: white;">
+                </div>
+            </div>
+
+            <div class="filter-group" style="margin-bottom: 20px;">
+                <span class="filter-label" style="font-size: 0.8rem;">Filtrar por Cliente</span>
+                <select id="obj-pdf-client" style="width: 100%; padding: 8px; background: #222; border: 1px solid #444; color: white;">
+                    <option value="ALL">Todos los Clientes</option>
+                </select>
+            </div>
+
+            <button class="btn" onclick="downloadObjectivesPdf()" style="width: 100%; padding: 12px; background: #3B5924; font-weight: bold;">
+                GENERAR INFORME INDICADOR
+                <div id="obj-pdf-loader" class="loader" style="width: 16px; height: 16px; display: none; margin-left: 10px;"></div>
             </button>
         </div>
     </div>
@@ -1161,8 +1239,29 @@
             document.getElementById('loader').style.display = 'none';
         }
 
+        function populateClientSelect(elementId) {
+            const select = document.getElementById(elementId);
+            if (select.options.length > 1) return;
+
+            if (currentData && currentData.clientes_todos) {
+                currentData.clientes_todos.forEach(c => {
+                    if (!c) return;
+                    const opt = document.createElement('option');
+                    opt.value = c;
+                    opt.innerText = c;
+                    select.appendChild(opt);
+                });
+            }
+        }
+
         function openPdfModal() {
-            document.getElementById('pdf-date').value = document.getElementById('date-end').value;
+            console.log("Abriendo Modal PDF Estándar");
+            populateClientSelect('pdf-client');
+            // Obtener fechas del objeto de evolución
+            const dates = (currentData && currentData.evolucion_total) ? currentData.evolucion_total.fechas : [];
+            if (dates.length > 0) {
+                document.getElementById('pdf-date').value = dates.sort().reverse()[0];
+            }
             document.getElementById('pdfModal').style.display = 'flex';
         }
 
@@ -1170,7 +1269,69 @@
             document.getElementById('pdfModal').style.display = 'none';
         }
 
+        function openAdvancedPdfModal() {
+            console.log("Abriendo Modal PDF Avanzado");
+            populateClientSelect('adv-pdf-client');
+            // Fechas por defecto: mes actual
+            const now = new Date();
+            const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+            const lastDay = now.toISOString().split('T')[0];
+            document.getElementById('adv-pdf-start').value = firstDay;
+            document.getElementById('adv-pdf-end').value = lastDay;
+            document.getElementById('advancedPdfModal').style.display = 'flex';
+        }
+
+        function closeAdvancedPdfModal() {
+            document.getElementById('advancedPdfModal').style.display = 'none';
+        }
+
+        async function downloadAdvancedPdf() {
+            console.log("Iniciando descarga de PDF Avanzado");
+            const start = document.getElementById('adv-pdf-start').value;
+            const end = document.getElementById('adv-pdf-end').value;
+            const client = document.getElementById('adv-pdf-client').value;
+            const article = document.getElementById('adv-pdf-article').value;
+            const loader = document.getElementById('adv-pdf-loader');
+
+            if (!start || !end) {
+                alert("Por favor selecciona el rango de fechas.");
+                return;
+            }
+
+            loader.style.display = 'inline-block';
+
+            try {
+                const response = await fetch('/api/reports/stock-advanced', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        fecha_inicio: start,
+                        fecha_fin: end,
+                        cliente: client,
+                        articulo: article || null
+                    })
+                });
+
+                if (!response.ok) throw new Error('Error al generar el PDF');
+
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Informe_Estrategico_Stock_${end}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+            } catch (err) {
+                console.error(err);
+                alert("Error técnico al generar el informe avanzado.");
+            } finally {
+                loader.style.display = 'none';
+            }
+        }
+
         async function downloadPdf() {
+            console.log("Iniciando descarga de PDF Estándar");
             const btnText = document.getElementById('pdf-btn-text');
             const loader = document.getElementById('pdf-loader');
 
@@ -1217,6 +1378,84 @@
                 btnText.innerText = "Descargar Documento";
                 loader.style.display = "none";
             }
+        }
+
+        function openObjectivesPdfModal() {
+            populateClientSelect('obj-pdf-client');
+            const now = new Date();
+            const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+            const lastDay = now.toISOString().split('T')[0];
+            document.getElementById('obj-pdf-start').value = firstDay;
+            document.getElementById('obj-pdf-end').value = lastDay;
+            document.getElementById('objectivesPdfModal').style.display = 'flex';
+        }
+
+        function closeObjectivesPdfModal() {
+            document.getElementById('objectivesPdfModal').style.display = 'none';
+        }
+
+        async function downloadObjectivesPdf() {
+            const start = document.getElementById('obj-pdf-start').value;
+            const end = document.getElementById('obj-pdf-end').value;
+            const client = document.getElementById('obj-pdf-client').value;
+            const loader = document.getElementById('obj-pdf-loader');
+
+            if (!start || !end) {
+                alert("Selecciona el rango de fechas.");
+                return;
+            }
+
+            loader.style.display = 'inline-block';
+            try {
+                const response = await fetch('/api/reports/stock-objectives', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fecha_inicio: start, fecha_fin: end, cliente: client })
+                });
+
+                if (!response.ok) {
+                    const errDetail = await response.json();
+                    throw new Error(errDetail.detail || 'Error en el servidor');
+                }
+
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Analisis_Objetivos_Stock_${end}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                closeObjectivesPdfModal();
+            } catch (err) {
+                alert("Error: " + err.message);
+            } finally {
+                loader.style.display = 'none';
+            }
+        }
+
+        // Asignación explícita a window para evitar problemas de scope
+        window.openPdfModal = openPdfModal;
+        window.closePdfModal = closePdfModal;
+        window.openAdvancedPdfModal = openAdvancedPdfModal;
+        window.closeAdvancedPdfModal = closeAdvancedPdfModal;
+        window.openObjectivesPdfModal = openObjectivesPdfModal;
+        window.closeObjectivesPdfModal = closeObjectivesPdfModal;
+        window.downloadAdvancedPdf = downloadAdvancedPdf;
+        window.downloadPdf = downloadPdf;
+        window.downloadObjectivesPdf = downloadObjectivesPdf;
+        window.closeModal = closeModal;
+        window.applyFilters = applyFilters;
+        window.refreshAllData = refreshAllData;
+
+        // Listener global para cerrar modales al hacer clic fuera
+        window.onclick = function (event) {
+            const modals = document.querySelectorAll('.modal');
+            modals.forEach(modal => {
+                if (event.target == modal) {
+                    modal.style.display = 'none';
+                }
+            });
         }
 
         init();
