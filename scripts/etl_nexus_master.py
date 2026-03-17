@@ -337,19 +337,70 @@ def run_etl():
     except Exception as e:
         logging.warning(f"Error Albaranes: {e}")
 
-    # 5. Maestro Fleje (Simulador Base)
+    # 5. Maestro Fleje (Rutas Maestras - BASE DE DATOS_1)
     try:
         f = SOURCES["maestro_local"]
         if f and f.exists():
-            logging.info(f"Procesando Maestro Fleje... {f.name}")
-            df = pd.read_excel(f, engine='calamine')
-            # Limpiar nombres de columnas para que sean SQL-friendly
-            df.columns = [str(c).strip().replace(' ', '_').replace('(', '').replace(')', '').replace('%', 'PCT_') for c in df.columns]
-            p = store_parquet(df, LAKE_DIR / "maestros" / "maestro_fleje")
+            logging.info(f"Procesando Rutas Maestras (BASE DE DATOS_1)... {f.name}")
+            
+            # Leer específicamente la hoja BASE DE DATOS_1
+            df = pd.read_excel(f, sheet_name="BASE DE DATOS_1", engine='calamine')
+            
+            # Normalización de columnas para evitar problemas de codificación (Artculo, etc.)
+            col_map = {
+                df.columns[2]: 'Articulo',
+                df.columns[3]: 'Volumen_Anual',
+                df.columns[4]: 'Centro',
+                df.columns[5]: 'Piezas_Hora',
+                df.columns[7]: 'UATC',
+                df.columns[10]: 'OEE',
+                df.columns[13]: 'Fase'
+            }
+            df = df.rename(columns=col_map)
+            
+            # Seleccionar y limpiar columnas clave
+            cols_final = ['Articulo', 'Centro', 'Piezas_Hora', 'OEE', 'Fase', 'UATC', 'Volumen_Anual']
+            df = df[cols_final].copy()
+            
+            # Limpiar filas vacías (crítico para archivos Excel con muchas filas fantasma)
+            df = df.dropna(subset=['Articulo', 'Centro'])
+            df = df[df['Articulo'].astype(str).str.strip() != ""]
+            
+            # Limpiar tipos de datos
+            df['Articulo'] = df['Articulo'].astype(str).str.strip()
+            df['Centro'] = df['Centro'].astype(str).str.strip().str.replace('.0', '', regex=False)
+            df['Piezas_Hora'] = df['Piezas_Hora'].apply(clean_val)
+            df['OEE'] = df['OEE'].apply(clean_val)
+            df['Fase'] = df['Fase'].apply(clean_val)
+            df['Volumen_Anual'] = df['Volumen_Anual'].apply(clean_val)
+            
+            # --- LÓGICA DE FILTRADO DE CADENCIAS REDUNDANTES ---
+            # Ordenar por Articulo y Fase para asegurar secuencia correcta
+            df = df.sort_values(by=['Articulo', 'Fase'])
+            
+            # Vectorizado: Detectar cambios en prod_horaria dentro del mismo artículo
+            # Shift traslada una fila hacia adelante para comparar con la anterior
+            df['Prev_Art'] = df['Articulo'].shift(1)
+            df['Prev_Cad'] = df['Piezas_Hora'].shift(1)
+            
+            # Condición: Mantener si es el primer registro del artículo O si la cadencia ha cambiado
+            mask = (df['Articulo'] != df['Prev_Art']) | (df['Piezas_Hora'] != df['Prev_Cad'])
+            
+            df_filtered = df[mask].copy()
+            df_filtered = df_filtered.drop(columns=['Prev_Art', 'Prev_Cad'])
+            
+            # Mapeo adicional para compatibilidad con simulador
+            df_filtered['Cadencia_Actual'] = df_filtered['Piezas_Hora']
+            df_filtered['Cadencia_Min'] = df_filtered['Piezas_Hora'] * 0.8
+            df_filtered['Cadencia_Max'] = df_filtered['Piezas_Hora'] * 1.2
+            df_filtered['Descripcion'] = "Ruta Maestra"
+            # Volumen_Anual ya viene del Excel ahora
+            
+            p = store_parquet(df_filtered, LAKE_DIR / "maestros" / "maestro_fleje")
             results["maestro_fleje"] = {"path": p, "type": "maestro"}
-            logging.info(f"Maestro Fleje sincronizado: {len(df)} filas.")
+            logging.info(f"Maestro Fleje filtrado sincronizado: {len(df_filtered)} filas (Original: {len(df)}).")
     except Exception as e:
-        logging.warning(f"Error Maestro Fleje: {e}")
+        logging.warning(f"Error Maestro Fleje (Rutas): {e}")
 
     # 6. Ocupacion
     try:

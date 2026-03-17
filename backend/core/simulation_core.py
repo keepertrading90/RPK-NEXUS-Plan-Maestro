@@ -2,13 +2,15 @@ import pandas as pd
 import os
 import time
 import functools
+import duckdb
+import json
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from datetime import datetime, timedelta
 
 # Configuración de rutas para RPK NEXUS
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-EXCEL_PATH = os.path.join(BASE_DIR, "db", "MAESTRO FLEJE.xlsx")
+DB_PATH = os.path.join(BASE_DIR, "db", "rpk_analytical.duckdb")
 
 try:
     from backend.db import models_sim as database
@@ -16,8 +18,6 @@ except ImportError:
     import sys
     sys.path.append(os.path.dirname(BASE_DIR))
     from backend.db import models_sim as database
-
-print(f"DEBUG:simulation_core: Usando EXCEL_PATH = {EXCEL_PATH}", flush=True)
 
 # Variable global para cachear el DataFrame
 _df_cache = None
@@ -34,53 +34,53 @@ def time_it(func):
     return wrapper
 
 def get_base_dataframe():
-    """Retorna una copia del DataFrame maestro, usando una caché binaria en disco para velocidad extra."""
+    """Retorna una copia del DataFrame maestro leyendo desde DuckDB (Carril B)."""
     global _df_cache
-    CACHE_PATH = EXCEL_PATH + ".cache.pkl"
     
     if _df_cache is not None:
         return _df_cache.copy()
 
-    # Verificar si existe caché y si es más reciente que el Excel
-    use_cache = False
-    if os.path.exists(CACHE_PATH) and os.path.exists(EXCEL_PATH):
-        if os.path.getmtime(CACHE_PATH) > os.path.getmtime(EXCEL_PATH):
-            use_cache = True
-
     try:
-        if use_cache:
-            print(f"[INFO] Cargando desde caché binaria (Modo Ultra Rápido)...", flush=True)
-            start_load = time.perf_counter()
-            _df_cache = pd.read_pickle(CACHE_PATH)
-            end_load = time.perf_counter()
-            print(f"[OK] Caché cargada en {end_load - start_load:.4f} segundos.", flush=True)
-        else:
-            print(f"[INFO] Cargando Excel Maestro por primera vez desde: {EXCEL_PATH}...", flush=True)
-            if not os.path.exists(EXCEL_PATH):
-                raise FileNotFoundError(f"No se encuentra el archivo maestro en: {EXCEL_PATH}")
+        print(f"[INFO] Cargando Maestro desde DuckDB (Sincronización v5.9.3)...", flush=True)
+        start_load = time.perf_counter()
+        
+        with duckdb.connect(DB_PATH) as conn:
+            # Seleccionamos las columnas necesarias mapeándolas a los nombres esperados por el simulador.
+            # 1. Piezas_Hora (del Excel) se mapea a "Piezas por minuto" dividiendo por 60.
+            # 2. Si OEE es 0 o NaN en el Excel, aplicamos un fallback de 0.75 (75%) para evitar explosión de saturación.
+            query = """
+                SELECT 
+                    Articulo, 
+                    Centro, 
+                    CAST(Piezas_Hora / 60.0 AS DOUBLE) as "Piezas por minuto",
+                    CASE 
+                        WHEN OEE IS NULL OR OEE <= 0 THEN 0.75 
+                        ELSE CAST(OEE AS DOUBLE) 
+                    END as "%OEE",
+                    CAST(Volumen_Anual AS DOUBLE) as "Volumen anual",
+                    Fase,
+                    UATC,
+                    Centro as centro_original
+                FROM maestro_fleje
+                WHERE TRY_CAST(Centro AS INTEGER) BETWEEN 100 AND 999
+            """
+            _df_cache = conn.execute(query).df()
             
-            start_load = time.perf_counter()
-            _df_cache = pd.read_excel(EXCEL_PATH, engine="calamine")
+            # Limpieza y tipado
+            _df_cache['Articulo'] = _df_cache['Articulo'].astype(str).str.strip()
+            _df_cache['Centro'] = _df_cache['Centro'].astype(str).str.strip()
             
-            # Limpieza básica inicial
-            _df_cache['Articulo'] = _df_cache['Articulo'].astype(str).str.replace(r'\.0$', '', regex=True)
-            _df_cache['Centro'] = _df_cache['Centro'].astype(str).str.replace(r'\.0$', '', regex=True)
-            _df_cache = _df_cache[~_df_cache['Centro'].isin(['nan', 'NaN', 'None', '', 'nan.0'])].copy()
-            
-            end_load = time.perf_counter()
-            print(f"[OK] Excel cargado en {end_load - start_load:.4f} segundos.", flush=True)
-            
-            # Guardar caché para la próxima vez
-            print(f"[INFO] Generando caché binaria para acelerar futuros arranques...", flush=True)
-            _df_cache.to_pickle(CACHE_PATH)
-            
-    except Exception as e:
-        print(f"[ERROR] Error al cargar DataFrame maestro: {e}")
-        return None
+            # Columnas de arquitectura Nexus que no están en el Parquet analítico
+            _df_cache['dias laborales 2026'] = 238
+            _df_cache['Setup (h)'] = 0.0
+            _df_cache['Ratio_MOD'] = 1.0
 
-    # Asegurar que centro_original existe (por si la caché es vieja)
-    if 'centro_original' not in _df_cache.columns:
-        _df_cache['centro_original'] = _df_cache['Centro']
+        end_load = time.perf_counter()
+        print(f"[OK] {len(_df_cache)} rutas maestras cargadas desde DuckDB en {end_load - start_load:.4f}s.", flush=True)
+        
+    except Exception as e:
+        print(f"[ERROR] Error al cargar DataFrame desde DuckDB: {e}")
+        return None
         
     return _df_cache.copy()
 
@@ -128,16 +128,13 @@ def add_article(data: dict) -> dict:
         'centro_original': centro
     }
     
-    # 1. Update in-memory DB and pickle cache
+    # 1. Update in-memory DB (Pickle cache deprecated in v5.9.3 for simulator, we use DuckDB)
     global _df_cache
     _df_cache = pd.concat([_df_cache, pd.DataFrame([nueva_fila])], ignore_index=True)
-    try:
-        _df_cache.to_pickle(EXCEL_PATH + ".cache.pkl")
-    except:
-        pass
 
-    # 2. Try updating the physical Excel via appending
+    # 2. Try updating the physical Excel (Mantener como backup de histórico manual)
     try:
+        EXCEL_PATH = os.path.join(BASE_DIR, "db", "MAESTRO FLEJE.xlsx")
         pph = ppm * 60
         ppd_16 = pph * 16
         ppd_24 = pph * 24
@@ -148,7 +145,6 @@ def add_article(data: dict) -> dict:
 
         wb = openpyxl.load_workbook(EXCEL_PATH)
         ws = wb.active
-        # Mismo orden que el Excel Maestro original RPK NEXUS v5.5
         new_row = [dias_lab, articulo, float(centro), vol_anual, ppm, pph, ppd_16, ppd_24, ppd_oee_24, ppd_oee_16, pps_24, pps_16, oee]
         ws.append(new_row)
         wb.save(EXCEL_PATH)
@@ -176,28 +172,20 @@ def delete_article(articulo: str, centro: str) -> dict:
     if not mask.any():
         return {"status": "error", "message": f"Artículo no encontrado ({articulo} en {centro})."}
         
-    # 1. Update in-memory DB and pickle cache
+    # 1. Update in-memory
     global _df_cache
     _df_cache = df[~mask].copy()
-    try:
-        _df_cache.to_pickle(EXCEL_PATH + ".cache.pkl")
-    except:
-        pass
 
-    # 2. Try updating the physical Excel via row removal
+    # 2. Try updating the physical Excel
     try:
+        EXCEL_PATH = os.path.join(BASE_DIR, "db", "MAESTRO FLEJE.xlsx")
         wb = openpyxl.load_workbook(EXCEL_PATH)
         ws = wb.active
         
-        # Encontrar la fila a eliminar (leyendo los valores A=Dias, B=Articulo, C=Centro...)
         row_to_delete = None
         for row in range(2, ws.max_row + 1):
-            art_val = str(ws.cell(row=row, column=2).value).strip()
-            cen_val = str(ws.cell(row=row, column=3).value).strip()
-            
-            # Limpieza básica para emparejar
-            art_val = art_val.replace('.0', '')
-            cen_val = cen_val.replace('.0', '')
+            art_val = str(ws.cell(row=row, column=2).value).strip().replace('.0', '')
+            cen_val = str(ws.cell(row=row, column=3).value).strip().replace('.0', '')
             
             if art_val == articulo and cen_val == centro:
                 row_to_delete = row
@@ -211,94 +199,59 @@ def delete_article(articulo: str, centro: str) -> dict:
         return {"status": "success", "message": "Memoria y Excel actualizados correctamente."}
         
     except PermissionError:
-        print("[WARN] Excel bloqueado al eliminar. Escribiendo en pending.")
         _log_pending_excel_update(f"DELETE: {articulo} en {centro}")
         return {"status": "warning", "message": "Memoria actualizada, pero Excel maestro está bloqueado. Se sincronizará más tarde."}
     except Exception as e:
-        print(f"[ERROR] delete_article excel mutator: {e}")
         return {"status": "warning", "message": f"Memoria actualizada. Error archivo físico: {str(e)}"}
 
 
 @time_it
 def calculate_saturation(df: pd.DataFrame, dias_laborales_override: int = None, horas_turno_default: int = 16):
     """
-    Calcula la saturación basada en las columnas del Excel.
+    Calcula la saturación basada en las columnas proyectadas desde DuckDB.
     """
-    
     # Aseguramos tipos de datos
     df['Volumen anual'] = pd.to_numeric(df['Volumen anual'], errors='coerce').fillna(0)
     df['Piezas por minuto'] = pd.to_numeric(df['Piezas por minuto'], errors='coerce').fillna(0)
-    df['%OEE'] = pd.to_numeric(df['%OEE'], errors='coerce').fillna(0)
+    df['%OEE'] = pd.to_numeric(df['%OEE'], errors='coerce').fillna(0.75)
     
-    # Aseguramos que existe la columna horas_turno (puede venir pre-configurada con overrides)
     if 'horas_turno' not in df.columns:
         df['horas_turno'] = horas_turno_default
     
-    # Usar override si existe, sino columna del excel, sino default 238
     if dias_laborales_override is not None:
         df['dias laborales 2026'] = dias_laborales_override
     else:
         df['dias laborales 2026'] = pd.to_numeric(df['dias laborales 2026'], errors='coerce').fillna(238)
 
-    # Aseguramos que existe la columna de setup (puede venir del Excel o ser 0)
     if 'Setup (h)' not in df.columns:
-        # Intentar buscar nombres alternativos
-        for col in ['Setup', 'Preparacion', 'Tiempo Preparacion']:
-            if col in df.columns:
-                df['Setup (h)'] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-                break
-        else:
-            df['Setup (h)'] = 0.0
+        df['Setup (h)'] = 0.0
     else:
         df['Setup (h)'] = pd.to_numeric(df['Setup (h)'], errors='coerce').fillna(0)
 
-    # --- NUEVA LÓGICA MOD (PERSONAL) ---
-    # 1. Buscar columna en Excel
     if 'Ratio_MOD' not in df.columns:
-        for col in ['Ratio MOD', 'Ratio Persona Maquina', 'Ratio Persona Articulo', 'MOD']:
-            if col in df.columns:
-                df['Ratio_MOD'] = pd.to_numeric(df[col], errors='coerce').fillna(1.0)
-                break
-        else:
-            df['Ratio_MOD'] = 1.0
+        df['Ratio_MOD'] = 1.0
     else:
         df['Ratio_MOD'] = pd.to_numeric(df['Ratio_MOD'], errors='coerce').fillna(1.0)
-
-    # El Ratio_MOD ya puede venir con pre-overrides de centro o articulo en get_simulation_data
 
     # Cálculos dinámicos
     df['Piezas por hora'] = df['Piezas por minuto'] * 60
     
-    # Manejo de OEE: Si viene como 70 en lugar de 0.70, normalizamos
-    # (Asumimos que si hay valores > 1, es escala 0-100)
-    oee_mask = df['%OEE'] > 1.1
+    # Normalización OEE (0-1)
     df_oee_calc = df['%OEE'].copy()
-    if oee_mask.any():
-        df_oee_calc = df_oee_calc.apply(lambda x: x/100.0 if x > 1.1 else x)
+    df_oee_calc = df_oee_calc.apply(lambda x: x/100.0 if x > 1.1 else x)
+    # Evitar divisiones por cero críticas
+    df_oee_calc = df_oee_calc.clip(lower=0.01)
 
-    # Calculamos horas totales requeridas (Producción + Setup)
-    # Evitamos división por cero asegurando que PPH y OEE sean > 0
     denominador = (df['Piezas por hora'] * df_oee_calc)
     df['Horas_Produccion'] = (df['Volumen anual'] / denominador).replace([float('inf'), -float('inf')], 0).fillna(0)
     df['Horas_Totales'] = df['Horas_Produccion'] + df['Setup (h)']
-    
-    # --- CÁLCULO HORAS HOMBRE (MOD) ---
-    # Las horas de preparación (Setup) siempre tienen ratio 1.0 según requerimiento.
-    # El Ratio_MOD solo afecta a las horas de producción pura.
     df['Horas_Hombre'] = (df['Horas_Produccion'] * df['Ratio_MOD'].fillna(1.0)) + df['Setup (h)']
     
-    # Capacidad Anual en Horas
     df['Capacidad_Anual_H'] = df['dias laborales 2026'] * df['horas_turno']
-    
-    # % Saturación
     df['Saturacion'] = (df['Horas_Totales'] / df['Capacidad_Anual_H']).replace([float('inf'), -float('inf')], 0).fillna(0)
 
-    # --- CÁLCULO IMPACTO (Peso del artículo sobre el total) ---
     total_horas_global = df['Horas_Totales'].sum()
-    if total_horas_global > 0:
-        df['Impacto'] = df['Horas_Totales'] / total_horas_global
-    else:
-        df['Impacto'] = 0.0
+    df['Impacto'] = (df['Horas_Totales'] / total_horas_global) if total_horas_global > 0 else 0.0
     
     return df
 
@@ -310,7 +263,6 @@ def get_pedidos_actuales(dias_laborales: int = None):
 
         years = sorted([d for d in os.listdir(pedidos_dir) if d.startswith("year=")], reverse=True)
         if not years: return None
-        
         months = sorted([d for d in os.listdir(os.path.join(pedidos_dir, years[0])) if d.startswith("month=")], reverse=True)
         if not months: return None
         
@@ -347,7 +299,6 @@ def get_stock_actual():
         
         years = sorted([d for d in os.listdir(stock_dir) if d.startswith("year=")], reverse=True)
         if not years: return None
-        
         months = sorted([d for d in os.listdir(os.path.join(stock_dir, years[0])) if d.startswith("month=")], reverse=True)
         if not months: return None
         
@@ -372,39 +323,31 @@ def get_stock_actual():
 
 @time_it
 def get_simulation_data(db: Session, scenario_id: int = None, dias_laborales: int = None, overrides_list: List = None, horas_turno: int = None, center_configs: dict = None, use_actual: bool = False):
-    # En lugar de pd.read_excel, usamos la caché
     df = get_base_dataframe()
+    if df is None:
+        return {"detail": [], "summary": [], "meta": {}}
     
-    # --- Lógica de Camino Dorado (V2) ---
     if use_actual:
         df_pedidos = get_pedidos_actuales(dias_laborales)
         df_stock = get_stock_actual()
         
         if df_pedidos is not None:
-            # Mergear vectorizadamente por artículo
             df = df.merge(df_pedidos, left_on='Articulo', right_on='ARTICULO_lake', how='left')
             df['DEMANDA_ACTUAL'] = df['DEMANDA_ACTUAL'].fillna(0)
-            
             if df_stock is not None:
                 df = df.merge(df_stock, left_on='Articulo', right_on='ARTICULO_lake', how='left')
                 df['STOCK_ACTUAL'] = df['STOCK_ACTUAL'].fillna(0)
-                # Demanda Neta (Evitando valores negativos con clip)
                 df['Volumen anual'] = (df['DEMANDA_ACTUAL'] - df['STOCK_ACTUAL']).clip(lower=0)
-                
-                # Limpiamos las columnas temporales del merge
                 df = df.drop(columns=['ARTICULO_lake_x', 'ARTICULO_lake_y', 'DEMANDA_ACTUAL', 'STOCK_ACTUAL'], errors='ignore')
             else:
                 df['Volumen anual'] = df['DEMANDA_ACTUAL']
                 df = df.drop(columns=['ARTICULO_lake', 'DEMANDA_ACTUAL'], errors='ignore')
         else:
             df['Volumen anual'] = 0
-    # ------------------------------------
     
-    # Asegurar que horas_turno es entero
     h_turno = int(horas_turno) if horas_turno is not None else 16
     df['horas_turno'] = h_turno
     
-    # Aplicar configuraciones por centro si existen
     if center_configs:
         for centro, config in center_configs.items():
             mask_c = df['Centro'].astype(str) == str(centro)
@@ -414,20 +357,15 @@ def get_simulation_data(db: Session, scenario_id: int = None, dias_laborales: in
                 if 'personnel_ratio' in config:
                     df.loc[mask_c, 'Ratio_MOD'] = float(config['personnel_ratio'])
     
-    # Overrides are ADDITIVE: first apply DB overrides from scenario, then frontend overrides on top
     selected_overrides = []
     if scenario_id:
         selected_overrides = list(db.query(database.ScenarioDetail).filter(database.ScenarioDetail.scenario_id == scenario_id).all())
     if overrides_list:
-        # Frontend overrides are applied AFTER DB overrides (they take priority)
         selected_overrides = selected_overrides + list(overrides_list)
 
     for ov in selected_overrides:
-        # Pydantic models (de server.py) o SQLAlchemy objects tienen atributos similares
-        # Si es un dict (de un payload POST), usamos get, si es objeto usamos getattr
         art = getattr(ov, 'articulo', None) or (ov.articulo if hasattr(ov, 'articulo') else None)
         cen = getattr(ov, 'centro', None) or (ov.centro if hasattr(ov, 'centro') else None)
-        
         mask = (df['Articulo'].astype(str) == str(art)) & (df['Centro'].astype(str) == str(cen))
         
         oee = getattr(ov, 'oee_override', None)
@@ -449,7 +387,6 @@ def get_simulation_data(db: Session, scenario_id: int = None, dias_laborales: in
     d_lab = int(dias_laborales) if dias_laborales is not None else None
     df = calculate_saturation(df, d_lab, h_turno)
     
-    # Agrupación por Centro para el resumen de saturación
     centro_summary = df.groupby('Centro').agg({
         'Saturacion': 'sum',
         'Volumen anual': 'sum',
@@ -457,15 +394,22 @@ def get_simulation_data(db: Session, scenario_id: int = None, dias_laborales: in
         'Horas_Hombre': 'sum',
         'Articulo': 'count'
     }).reset_index()
-    
     centro_summary.rename(columns={'Articulo': 'Num_Articulos'}, inplace=True)
     
-    # Asegurar que no hay NaNs ni Valores Infinitos que rompan el JSON
     df = df.fillna(0).replace([float('inf'), -float('inf')], 0)
     centro_summary = centro_summary.fillna(0).replace([float('inf'), -float('inf')], 0)
 
+    # Aseguramos que UATC y Fase se incluyan en el detalle para el frontend
+    cols_to_return = [
+        'Articulo', 'Centro', 'Volumen anual', 'Piezas por minuto', 
+        '%OEE', 'Saturacion', 'Ratio_MOD', 'UATC', 'Fase',
+        'Horas_Produccion', 'Horas_Totales', 'Horas_Hombre', 'Setup (h)', 'dias laborales 2026'
+    ]
+    # Filtrar solo columnas existentes para evitar errores si alguna falta por alguna razón
+    cols_final = [c for c in cols_to_return if c in df.columns]
+
     return {
-        "detail": df.to_dict(orient="records"),
+        "detail": df[cols_final].to_dict(orient="records"),
         "summary": centro_summary.to_dict(orient="records"),
         "meta": {
             "dias_laborales": d_lab if d_lab is not None else 238,

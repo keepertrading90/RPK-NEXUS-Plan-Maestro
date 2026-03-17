@@ -67,13 +67,14 @@ app.add_middleware(
 class Message(BaseModel):
     text: str
 
+# Registro de routers de informes PDF
 app.include_router(pdf_stock.router, prefix="/api", tags=["reports"])
 app.include_router(pdf_tiempos.router, prefix="/api", tags=["reports"])
 app.include_router(pdf_pedidos.router, prefix="/api", tags=["reports"])
 app.include_router(pdf_comparativa.router, prefix="/api", tags=["reports"])
 app.include_router(pdf_escenario.router, prefix="/api", tags=["reports"])
-app.include_router(pdf_stock_advanced.router, prefix="/api", tags=["reports"])
 app.include_router(pdf_stock_objectives.router, prefix="/api", tags=["reports"])
+app.include_router(pdf_stock_advanced.router, prefix="/api", tags=["reports"])
 
 # Modelos para el Simulador
 class OverrideBase(BaseModel):
@@ -239,7 +240,8 @@ async def get_module_index(mod_name: str, request: Request):
     # 1. Si es un archivo directo (con extensión), servirlo si existe
     if "." in mod_name:
         for p in [STATIC_DIR / "assets" / mod_name, STATIC_DIR / "modules" / mod_name]:
-            if p.exists(): return FileResponse(p)
+            if p.exists(): 
+                return FileResponse(p, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
         raise HTTPException(status_code=404)
 
     # 2. Verificar directorio

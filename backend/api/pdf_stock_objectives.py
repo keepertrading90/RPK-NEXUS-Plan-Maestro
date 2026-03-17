@@ -33,23 +33,34 @@ def generate_objectives_pdf(req: ObjectivesReportRequest):
     conn = get_duckdb_conn()
     
     try:
-        # Consulta para obtener la media de stock vs objetivo por artículo
-        # Solo para artículos que tengan objetivo fijado (>0)
+        # Consulta para obtener la media de stock y el objetivo vigente (el último del periodo)
         query = f"""
+            WITH ultimas_fechas AS (
+                SELECT Articulo, MAX(Fecha) as max_f
+                FROM existencias
+                WHERE Fecha BETWEEN '{req.fecha_inicio}' AND '{req.fecha_fin}'
+                GROUP BY Articulo
+            ),
+            objetivos_vigentes AS (
+                SELECT e.Articulo, e.Stock_Objetivo
+                FROM existencias e
+                JOIN ultimas_fechas uf ON e.Articulo = uf.Articulo AND e.Fecha = uf.max_f
+                WHERE e.Stock_Objetivo > 0
+            )
             SELECT 
-                Articulo, 
-                MAX(Descripcion) as Descripcion,
-                AVG(Cantidad) as Media_Cantidad,
-                MAX(Stock_Objetivo) as Objetivo,
-                MAX(Cliente) as Cliente
-            FROM existencias
-            WHERE Fecha BETWEEN '{req.fecha_inicio}' AND '{req.fecha_fin}'
-              AND Stock_Objetivo > 0
+                e.Articulo, 
+                MAX(e.Descripcion) as Descripcion,
+                AVG(e.Cantidad) as Media_Cantidad,
+                MAX(ov.Stock_Objetivo) as Objetivo,
+                MAX(e.Cliente) as Cliente
+            FROM existencias e
+            JOIN objetivos_vigentes ov ON e.Articulo = ov.Articulo
+            WHERE e.Fecha BETWEEN '{req.fecha_inicio}' AND '{req.fecha_fin}'
         """
         if req.cliente and req.cliente != "ALL":
-            query += f" AND Cliente = '{req.cliente}'"
+            query += f" AND e.Cliente = '{req.cliente}'"
             
-        query += " GROUP BY Articulo ORDER BY Articulo"
+        query += " GROUP BY e.Articulo ORDER BY e.Articulo"
         
         df = conn.execute(query).df()
         
@@ -72,6 +83,8 @@ def generate_objectives_pdf(req: ObjectivesReportRequest):
         dentro_objetivo = len(df[df['Cumplimiento_Pct'] <= 100])
         pct_exito = (dentro_objetivo / total_articulos * 100) if total_articulos > 0 else 0
 
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error en Informe de Objetivos: {e}")
         raise HTTPException(status_code=500, detail=str(e))

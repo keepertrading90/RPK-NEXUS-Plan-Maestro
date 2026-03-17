@@ -1,4 +1,4 @@
-﻿const API_BASE = '/api';
+const API_BASE = '/api';
 let currentData = null;
 let baseData = null;
 let chartInstance = null;
@@ -12,6 +12,7 @@ let isComparisonMode = false;
 let comparisonData = null;
 let comparisonViewMode = 'absolute'; // 'absolute' or 'delta'
 let isModeActual = false;
+let selectedUATC = 'all';
 
 function debounce(func, wait) {
     return function (...args) {
@@ -106,6 +107,19 @@ async function loadSimulation(scenarioId) {
         }
 
         populateWorkCenters();
+        renderUATCFilter();
+        
+        // --- INITIAL FILTER: PHASE 10 ---
+        if (scenarioId === 'base' && currentData.detail) {
+            console.log("Aplicando filtro inicial Fase 10...");
+            const phase10Centers = [...new Set(currentData.detail.filter(d => Math.floor(d.Fase) === 10).map(d => String(d.Centro)))];
+            console.log("Centros Fase 10 encontrados:", phase10Centers.length);
+            if (phase10Centers.length > 0) {
+                selectedCenters = phase10Centers;
+                populateWorkCenters(); // Refresh to show checks
+            }
+        }
+
         updateNavItemActive(scenarioId);
         updateUI();
     } catch (error) {
@@ -152,11 +166,19 @@ function updateUI() {
     let filteredSummary = [...currentData.summary];
     let filteredDetail = [...currentData.detail];
 
+    // 1. Filtrar por UATC (detalle manda sobre resumen)
+    if (selectedUATC !== 'all') {
+        filteredDetail = filteredDetail.filter(d => d.UATC === selectedUATC);
+        const validCenters = new Set(filteredDetail.map(d => String(d.Centro)));
+        filteredSummary = filteredSummary.filter(s => validCenters.has(String(s.Centro)));
+    }
+
+    // 2. Filtrar por Centros seleccionados
     const isFiltered = selectedCenters.length > 0 && !selectedCenters.includes('all');
     if (isFiltered) {
         const selectedSet = new Set(selectedCenters.map(val => String(val).trim()));
-        filteredSummary = currentData.summary.filter(s => selectedSet.has(String(s.Centro).trim()));
-        filteredDetail = currentData.detail.filter(d => selectedSet.has(String(d.Centro).trim()));
+        filteredSummary = filteredSummary.filter(s => selectedSet.has(String(s.Centro).trim()));
+        filteredDetail = filteredDetail.filter(d => selectedSet.has(String(d.Centro).trim()));
     }
 
     renderChart(filteredSummary);
@@ -659,6 +681,24 @@ function updateDropdownText() {
     }
 }
 
+function renderUATCFilter() {
+    const filter = document.getElementById('uatc-filter');
+    if (!filter || !currentData.detail) return;
+
+    const uatcs = [...new Set(currentData.detail.map(d => d.UATC).filter(u => u))].sort();
+    console.log("UATCs encontradas para el filtro:", uatcs);
+    let html = '<option value="all">-- Todas las UATC --</option>';
+    uatcs.forEach(u => {
+        html += `<option value="${u}" ${selectedUATC === u ? 'selected' : ''}>${u}</option>`;
+    });
+    filter.innerHTML = html;
+
+    filter.onchange = (e) => {
+        selectedUATC = e.target.value;
+        updateUI();
+    };
+}
+
 function setupEventListeners() {
     document.getElementById('table-body').onclick = (e) => {
         if (e.target.classList.contains('btn-simular')) {
@@ -712,6 +752,9 @@ function setupEventListeners() {
 
     document.getElementById('btn-clear-filter').onclick = () => {
         selectedCenters = ['all'];
+        selectedUATC = 'all';
+        const uatcFilter = document.getElementById('uatc-filter');
+        if (uatcFilter) uatcFilter.value = 'all';
         populateWorkCenters(); // Re-render to clear checks
         updateUI();
     };

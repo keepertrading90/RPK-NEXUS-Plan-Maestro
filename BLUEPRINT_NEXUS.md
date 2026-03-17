@@ -1,5 +1,22 @@
-# BLUEPRINT_NEXUS v5.9.1 (Fase 3.1 Reportes Avanzados de Automoción — Marzo 2026)
+# BLUEPRINT_NEXUS v5.9.3 (Fase 3.2 Rutas Maestras — Marzo 2026)
 Este documento es la **fuente de la verdad arquitectónica** para la IA y los desarrolladores humanos de acuerdo al protocolo de Industria 5.0.
+
+---
+
+## MOTOR ANALÍTICO - RUTAS MAESTRAS (Novedad v5.9.3)
+- **Fuente Única**: Hoja `BASE DE DATOS_1` en `MAESTRO FLEJE.xlsx`.
+- **Lógica de Filtrado de Cadencias**: Se omiten centros de trabajo que tengan exactamente la misma cadencia (`prod_horaria`) que la fase anterior dentro del mismo artículo, salvo que sea la fase inicial (Fase 10).
+- **Filtros Avanzados (Simulator)**:
+    - **Fase 10 Priorizada**: Al cargar, el simulador selecciona automáticamente solo los centros de Fase 10 para una vista de cabecera limpia.
+    - **Filtro UATC**: Nuevo desplegable en la barra de control para filtrar por Unidad de Atribución de Coste.
+- **Columnas Maestras**:
+    - `Articulo`: ID del producto.
+    - `Centro`: Código de máquina (ej: 142).
+    - `Fase`: Fase de fabricación (distribución de 10 en adelante).
+    - `UATC`: Unidad de Atribución de Coste.
+    - `Piezas_Hora`: Cadencia nominal para cálculos de saturación.
+
+---
 
 ## ARQUITECTURA HÍBRIDA NEXUS-IA
 - **Framework Principal**: FastAPI + DuckDB (Analítico) + SQLite (Transaccional)
@@ -145,7 +162,8 @@ Usuario pregunta
 
 | Fecha | Versión | Cambios |
 |-------|---------|---------|
-| 12/03/2026 | **v5.9.1** | **Informes de Automoción**: Implementación del motor `pdf_stock_advanced.py`. Análisis de capital inmovilizado, comparativas mensuales y Pareto de clientes con filtros profundos por fecha y artículo. |
+| 16/03/2026 | **v5.9.2** | **Rutas Maestras**: Integración de la hoja `BASE DE DATOS_1` como fuente única. Implementado filtrado vectorial de fases redundantes por cadencia idéntica. Adición de campos `FASE` y `UATC` al motor DuckDB. |
+| 12/03/2026 | v5.9.1 | **Informes de Automoción**: Implementación del motor `pdf_stock_advanced.py`. Análisis de capital inmovilizado, comparativas mensuales y Pareto de clientes con filtros profundos por fecha y artículo. |
 | 11/03/2026 | v5.9.0 | **Integración ADK Proxy**: Delegación de ejecución a Google ADK (puerto 8004). El backend Nexus ahora enruta peticiones SSE hacia el framework de agentes para evitar alucinaciones SQl monolíticas y dotar de acceso nativo DuckDB a *Quen_Arquitecto*. |
 | 10/03/2026 | v5.8.0 | Motor IA Fase 3: RAG en memoria (`nexus_rag.py`), Memoria conversacional multi-turno (`nexus_memoria.py`), Alertas proactivas (`nexus_alertas.py`), Streaming SSE token a token (`/api/v1/chat/stream`), Auto-generación de artifacts MD, corrección de consultas DuckDB (Centro 142 → maestro_fleje). |
 | 10/03/2026 | v5.7.5 | Fase 2 IA: Qwen2.5-Coder genera SQL + narrativa en una llamada. Prewarm del modelo al arrancar. `nexus_rag.py` indexa artículos y centros. |
@@ -161,5 +179,3 @@ Usuario pregunta
 - **Backend Core**: Servidor Nexus port 8000.
 - **Agent Server**: Google Agent Development Kit (ADK) port 8004.
 - **LLM Engine**: Ollama (localhost:11434).
-
-
