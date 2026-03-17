@@ -1119,6 +1119,12 @@ def create_scenario(scenario_data: ScenarioCreate, db: Session = Depends(get_db_
     
     return db_scenario
 
+@app.get("/api/admin/clear-cache")
+async def clear_simulation_cache():
+    """Limpia el cache en memoria del DataFrame maestro para forzar recarga desde DuckDB."""
+    simulation_core._df_cache = None
+    return {"status": "success", "message": "Cache del simulador limpiado. Proxima llamada recargara desde DuckDB."}
+
 @app.get("/api/simulate/base")
 async def get_base_simulation(db: Session = Depends(get_db_sim), dias_laborales: Optional[int] = None, horas_turno: Optional[int] = None, use_actual: bool = False):
     try:

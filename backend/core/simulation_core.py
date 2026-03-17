@@ -37,8 +37,14 @@ def get_base_dataframe():
     """Retorna una copia del DataFrame maestro leyendo desde DuckDB (Carril B)."""
     global _df_cache
     
+    # Auto-invalidar cache si faltan columnas críticas (tras actualizaciones en caliente)
     if _df_cache is not None:
-        return _df_cache.copy()
+        required_cols = {'UATC', 'Fase', 'Articulo', 'Centro'}
+        if not required_cols.issubset(set(_df_cache.columns)):
+            print("[WARN] Cache inválido: faltan columnas críticas. Recargando desde DuckDB...", flush=True)
+            _df_cache = None
+        else:
+            return _df_cache.copy()
 
     try:
         print(f"[INFO] Cargando Maestro desde DuckDB (Sincronización v5.9.3)...", flush=True)
@@ -396,8 +402,19 @@ def get_simulation_data(db: Session, scenario_id: int = None, dias_laborales: in
     }).reset_index()
     centro_summary.rename(columns={'Articulo': 'Num_Articulos'}, inplace=True)
     
-    df = df.fillna(0).replace([float('inf'), -float('inf')], 0)
-    centro_summary = centro_summary.fillna(0).replace([float('inf'), -float('inf')], 0)
+    # fillna SOLO en columnas numéricas para no corromper UATC (string) ni Fase
+    numeric_cols = df.select_dtypes(include='number').columns
+    df[numeric_cols] = df[numeric_cols].fillna(0).replace([float('inf'), -float('inf')], 0)
+    
+    # Rellenar NaNs en columnas de texto con string vacío para evitar fallos de serialización JSON en FastAPI
+    non_numeric_cols = df.select_dtypes(exclude='number').columns
+    df[non_numeric_cols] = df[non_numeric_cols].fillna("")
+    
+    numeric_cols_sum = centro_summary.select_dtypes(include='number').columns
+    centro_summary[numeric_cols_sum] = centro_summary[numeric_cols_sum].fillna(0).replace([float('inf'), -float('inf')], 0)
+    
+    non_numeric_cols_sum = centro_summary.select_dtypes(exclude='number').columns
+    centro_summary[non_numeric_cols_sum] = centro_summary[non_numeric_cols_sum].fillna("")
 
     # Aseguramos que UATC y Fase se incluyan en el detalle para el frontend
     cols_to_return = [
