@@ -24,6 +24,11 @@ SOURCES = {
     "carga_centros": Path(NETWORK_IP) / "List Avance Obra-Centro y Operacion",
     "maestro_local": BASE_DIR / "db" / "MAESTRO FLEJE.xlsx",
     "rutas_ingenieria": None,
+    "fase10_prensas": Path(r"C:\Users\ismael.rodriguez\OneDrive - RPK S COOP\UATC Forma-Fleje\PLANIFICACION\CARGA PRENSAS 2.xlsx"),
+    "fase10_flej": Path(r"C:\Users\ismael.rodriguez\OneDrive - RPK S COOP\UATC Forma-Fleje\PLANIFICACION\CARGA FLEJ 2.xlsx"),
+    "fase10_forma": Path(r"C:\Users\ismael.rodriguez\OneDrive - RPK S COOP\UATC Forma-Fleje\PLANIFICACION\CARGA FORMA 2.xlsx"),
+    "fase10_compresion": Path(r"C:\Users\ismael.rodriguez\OneDrive - RPK S COOP\UATC Forma-Fleje\PLANIFICACION\CARGA MAQUINA COMPRESION.xlsx"),
+    "fase10_retenes": Path(r"C:\Users\ismael.rodriguez\OneDrive - RPK S COOP\UATC Forma-Fleje\PLANIFICACION\CARGA MAQUINA RETENES.xlsx"),
     "objetivos_stock": Path(NETWORK_IP) / "PANEL" / "_PROYECTOS" / "DASHBOARD_STOCK" / "backend" / "OBJETIVOS_STOCK.xlsx",
     "ocupacion": Path(NETWORK_IP) / "Listado ubicaciones vacias"
 }
@@ -414,6 +419,23 @@ def run_etl():
                 logging.info(f"Ocupacion guardado: {len(df)} filas.")
     except Exception as e:
         logging.warning(f"Error Ocupacion: {e}")
+
+    # 7. Fase 10 (Gemelo Digital)
+    try:
+        from etl_cabeceras_fase10 import build_carga_consolidada
+        fase10_paths = [
+            SOURCES["fase10_prensas"], 
+            SOURCES["fase10_flej"], 
+            SOURCES["fase10_forma"], 
+            SOURCES["fase10_compresion"], 
+            SOURCES["fase10_retenes"]
+        ]
+        logging.info("Procesando Consolidado de Cabeceras Fase 10 (Gemelo Digital)...")
+        p = build_carga_consolidada(fase10_paths, LAKE_DIR)
+        if p:
+            results["carga_cabeceras"] = {"path": p, "type": "transaccional"}
+    except Exception as e:
+        logging.warning(f"Error Fase 10 Cabeceras: {e}")
 
     # Sincronizar DuckDB View mappings
     sync_duckdb(results)
