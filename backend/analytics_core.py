@@ -1,43 +1,63 @@
 """
-RPK NEXUS - Analítica Cruzada Core
+RPK NEXUS - Analítica Cruzada Core / Gemelo Digital Predictivo
 Calcula métricas combinando Stock y Capacidad (Tiempos).
 """
-
-import sqlite3
-import pandas as pd
+import duckdb
+import logging
 from pathlib import Path
+import pandas as pd
 
-DB_PATH = Path(__file__).resolve().parent / "db" / "rpk_industrial.db"
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
-def get_cobertura_global():
+class NexusDigitalTwin:
     """
-    Calcula una métrica de cobertura cruzando stock total vs carga total.
-    Ratio = (Stock Total / Carga Media Diaria)
+    Motor del Gemelo Digital Predictivo de NEXUS.
+    Cruza el estado de cabeceras (Fase 10) con las Rutas Maestras para calcular el Efecto Cascada.
     """
-    try:
-        conn = sqlite3.connect(DB_PATH)
+    def __init__(self, data_lake_path: Path = None):
+        base_dir = Path(__file__).resolve().parent
+        self.data_lake = data_lake_path or base_dir / "data_lake"
         
-        # 1. Obtener Carga Total de Máquinas (Tiempos)
-        df_tiempos = pd.read_sql("SELECT SUM(Carga) as total_carga FROM tiempos_carga", conn)
-        total_carga = df_tiempos['total_carga'].iloc[0] or 1
-        
-        # 2. Obtener Stock Total
-        df_stock = pd.read_sql("SELECT SUM(Cantidad) as total_stock FROM stock_snapshot", conn)
-        total_stock = df_stock['total_stock'].iloc[0] or 0
-        
-        conn.close()
-        
-        # Cálculo simplificado para esta fase
-        # Supongamos una cadencia media para convertir stock en horas (Ratio teórico)
-        cobertura = (total_stock / 1000) / (total_carga / 24) # Ejemplo de ratio
-        
+        # Conexión in-memory con DuckDB para cruces zero-latency (Carril B)
+        self.conn = duckdb.connect(database=':memory:')
+        logger.info("Motor Gemelo Digital (DuckDB) inicializado en memoria RAM.")
+        self._inicializar_vistas()
+
+    def _inicializar_vistas(self):
+        """Crea vistas lógicas apuntando a los parquets del Data Lake."""
+        try:
+            # Vista Maestro Fleje (Rutas)
+            path_maestro = self.data_lake / "maestros" / "maestro_fleje.parquet"
+            if path_maestro.exists():
+                self.conn.execute(f"CREATE VIEW rutas_maestras AS SELECT * FROM read_parquet('{path_maestro}')")
+            else:
+                self.conn.execute(f"CREATE VIEW rutas_maestras AS SELECT * FROM read_parquet('{self.data_lake}/maestros/**/*.parquet')")
+            logger.info("Vistas lógicas en memoria creadas correctamente.")
+        except Exception as e:
+            logger.warning(f"Advertencia al mapear vistas DuckDB (posible falta de parquets iniciales): {e}")
+
+    def proyectar_impacto_secundarios(self, simulacion_params=None):
+        logger.info("Calculando proyecciones de impacto hacia adelante (Forward-Pass)...")
+        try:
+            # Placeholder arquitectónico hasta completar ETL Fase 10
+            resultado = [{"centro_secundario": "127", "horas_proyectadas": 24.5}]
+            return {"status": "success", "data": resultado, "message": "Proyección simulada finalizada"}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    def get_cobertura_global(self):
+        """Métrica de cobertura adaptada a DuckDB (simulada por ahora)."""
         return {
-            "stock_total": float(total_stock),
-            "carga_total_horas": float(total_carga),
-            "dias_cobertura_teorica": round(cobertura, 1)
+            "stock_total": 0.0,
+            "carga_total_horas": 0.0,
+            "dias_cobertura_teorica": 0.0
         }
-    except Exception as e:
-        return {"error": str(e)}
+
+    def close(self):
+        self.conn.close()
 
 if __name__ == "__main__":
-    print(f"📊 Analítica NEXUS: {get_cobertura_global()}")
+    twin = NexusDigitalTwin()
+    print(twin.proyectar_impacto_secundarios())
+    twin.close()
