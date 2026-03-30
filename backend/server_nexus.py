@@ -1156,15 +1156,36 @@ async def get_scenario_simulation(scenario_id: int, db: Session = Depends(get_db
 
 @app.post("/api/simulate/preview")
 async def get_preview_simulation(payload: PreviewPayload, db: Session = Depends(get_db_sim), use_actual: bool = False):
+    """
+    Endpoint enriquecido con Gemelo Digital:
+    Devuelve resumen + detalle + proyeccion_predictiva en un solo JSON.
+    La proyeccion_predictiva se calcula siempre que haya parquets disponibles.
+    Si no hay parquets, el frontend mostrará un warning pero NO se quedará en blanco.
+    """
     try:
-        return simulation_core.get_simulation_data(
-            db, 
-            overrides_list=payload.overrides, 
+        sim_result = simulation_core.get_simulation_data(
+            db,
+            overrides_list=payload.overrides,
             dias_laborales=payload.dias_laborales,
             horas_turno=payload.horas_turno,
             center_configs=payload.center_configs,
             use_actual=use_actual
         )
+
+        # --- GEMELO DIGITAL: proyectar impacto sobre secundarios ---
+        # Graceful Degradation: si falla, agrega warning sin romper la respuesta.
+        predictive_result = {"status": "unavailable", "data": [], "message": "Sin parquets"}
+        try:
+            from backend.analytics_core import proyectar_impacto_secundarios
+            predictive_result = proyectar_impacto_secundarios()
+        except Exception as pred_err:
+            logging.warning(f"[GemeloDigital] Proyección predictiva no disponible: {pred_err}")
+
+        # Inyectar proyección al resultado final
+        if isinstance(sim_result, dict):
+            sim_result["gemelo_digital"] = predictive_result
+        return sim_result
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -1478,23 +1499,23 @@ async def get_albaranes_articulos(fecha_inicio: str = None, fecha_fin: str = Non
         return {"error": str(e)}
 
 
-# --- ENDPOINTS PREDICTIVOS (GEMELO DIGITAL FASE 2) ---
-
-from backend.analytics_core import proyectar_impacto_secundarios
+# --- ENDPOINTS PREDICTIVOS (GEMELO DIGITAL FASE 2 / v2.0) ---
 
 @app.get("/api/v1/predictive/saturation")
 async def get_predictive_saturation(dias_horizonte: int = 7):
     """
-    Simulación predictiva 'carril rápido' que evalúa la recarga 
-    sobre los secundarios originada por las órdenes actuales de Prensas, Fleje... (Fase 10).
+    Endpoint estático del Gemelo Digital:
+    Evalúa la saturación proyectada sobre centros secundarios a partir de los parquets del ETL.
+    Útil para cargar el dashboard predictivo en modo lectura sin necesidad de un what-if activo.
     """
     try:
-        data = proyectar_impacto_secundarios(dias_horizonte=dias_horizonte)
-        if hasattr(data, "get") and data.get("error"):
-            return {"status": "error", "message": data["error"]}
-        return {"status": "success", "data": data}
+        from backend.analytics_core import proyectar_impacto_secundarios
+        result = proyectar_impacto_secundarios(dias_horizonte=dias_horizonte)
+        return result  # ya incluye {"status": ..., "data": ..., "message": ...}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        logging.error(f"[predictive/saturation] {e}")
+        return {"status": "error", "message": str(e), "data": []}
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

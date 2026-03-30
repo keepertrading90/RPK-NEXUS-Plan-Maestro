@@ -901,6 +901,28 @@ function setupEventListeners() {
         document.getElementById('manage-modal').style.display = 'flex';
     };
 
+    // --- GEMELO DIGITAL: toggle de panel ---
+    const btnTwin = document.getElementById('btn-twin');
+    if (btnTwin) {
+        btnTwin.onclick = () => {
+            if (isComparisonMode) {
+                alert("Debes salir del Modo Comparativa antes de ver el Gemelo Digital.");
+                return;
+            }
+            toggleTwinPanel();
+        };
+    }
+
+    const btnRefreshTwin = document.getElementById('btn-refresh-twin');
+    if (btnRefreshTwin) {
+        btnRefreshTwin.onclick = () => loadTwinDashboard();
+    }
+
+    const twinHorizon = document.getElementById('twin-horizon');
+    if (twinHorizon) {
+        twinHorizon.onchange = () => loadTwinDashboard();
+    }
+
     const closeHandlers = document.querySelectorAll('.close, .close-manage');
     closeHandlers.forEach(btn => {
         btn.onclick = () => {
@@ -908,7 +930,6 @@ function setupEventListeners() {
         };
     });
 
-    // Se usa un document.addEventListener para no pisar el de dropdowns
     document.addEventListener('click', (event) => {
         if (event.target.classList.contains('modal')) {
             event.target.style.display = 'none';
@@ -988,6 +1009,18 @@ async function updatePreviewSimulation() {
         // Actualizar panel de cambios tras simulación
         renderLocalOverrides();
         updateUI();
+
+        // --- Si el panel del Gemelo Digital está visible, re-dibujar con datos frescos ---
+        const twinPanel = document.getElementById('twin-panel');
+        if (twinPanel && twinPanel.style.display !== 'none') {
+            const gd = currentData?.gemelo_digital;
+            if (gd && gd.status === 'success' && gd.data?.length > 0) {
+                renderTwinChart(gd.data);
+                renderTwinTable(gd.data);
+                renderTwinKPIs(gd.data);
+                setTwinBadge('live', 'Proyección en vivo (What-If)');
+            }
+        }
     } catch (e) { console.error(e); }
     finally {
         setLoading(false);
@@ -2099,3 +2132,275 @@ document.addEventListener('DOMContentLoaded', () => {
         deleteBtn.addEventListener('click', confirmDeleteArticle);
     }
 });
+
+
+// ============================================================
+// MÓDULO GEMELO DIGITAL PREDICTIVO
+// Integración Vanilla JS - Fase 4
+// ============================================================
+
+let predictiveChartInstance = null;
+let isTwinPanelActive = false;
+
+/** Instala variables CSS de soporte para el panel twin */
+const TWIN_THRESHOLDS = {
+    CRITICO: 120,   // > 120% saturacion total -> rojo
+    ALERTA: 80,     // > 80% -> amarillo
+};
+
+function toggleTwinPanel() {
+    const twinPanel = document.getElementById('twin-panel');
+    const mainPanel = document.querySelector('main.center-panel:not(#twin-panel)');
+    const mainLayout = document.querySelector('.main-layout');
+
+    isTwinPanelActive = !isTwinPanelActive;
+
+    if (isTwinPanelActive) {
+        if (twinPanel) twinPanel.style.display = 'flex';
+        if (mainPanel) mainPanel.style.display = 'none';
+        document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+        document.getElementById('btn-twin')?.classList.add('active');
+        loadTwinDashboard();
+    } else {
+        if (twinPanel) twinPanel.style.display = 'none';
+        if (mainPanel) mainPanel.style.display = 'flex';
+        updateNavItemActive(currentScenarioId);
+    }
+}
+
+async function loadTwinDashboard() {
+    const horizon = document.getElementById('twin-horizon')?.value || 7;
+    setTwinBadge('loading', 'Calculando...');
+
+    try {
+        const res = await fetch(`${API_BASE}/v1/predictive/saturation?dias_horizonte=${horizon}`);
+        const result = await res.json();
+
+        if (result.status === 'error') {
+            setTwinBadge('error', 'Sin datos ETL');
+            document.getElementById('twin-table-body').innerHTML =
+                `<tr><td colspan="7" style="text-align:center; color:#f87171; padding:2rem;">
+                    ⚠️ ${result.message || 'No se encontraron parquets. Ejecuta el ETL primero.'}
+                </td></tr>`;
+            document.getElementById('twin-kpis').innerHTML =
+                `<p style="color:#f87171; font-size:0.8rem;">⚠️ Sin parquets disponibles.</p>`;
+            return;
+        }
+
+        const data = result.data || [];
+
+        if (data.length === 0) {
+            setTwinBadge('warn', 'Sin órdenes activas');
+            document.getElementById('twin-table-body').innerHTML =
+                `<tr><td colspan="7" style="text-align:center; color:#9ca3af; padding:2rem;">No hay órdenes activas en Fase 10 para proyectar.</td></tr>`;
+            document.getElementById('twin-kpis').innerHTML =
+                `<p style="color:#9ca3af;">Sin datos de proyección.</p>`;
+            return;
+        }
+
+        renderTwinChart(data);
+        renderTwinTable(data);
+        renderTwinKPIs(data);
+        setTwinBadge('ok', `${data.length} centros proyectados`);
+
+    } catch (err) {
+        console.error('[GemeloDigital] Error cargando dashboard predictivo:', err);
+        setTwinBadge('error', 'Error de red');
+    }
+}
+
+function setTwinBadge(type, text) {
+    const badge = document.getElementById('twin-status-badge');
+    if (!badge) return;
+    const styles = {
+        ok:      { bg: 'rgba(74,222,128,0.12)', color: '#4ade80', border: '#4ade80' },
+        warn:    { bg: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '#fbbf24' },
+        error:   { bg: 'rgba(248,113,113,0.12)', color: '#f87171', border: '#f87171' },
+        loading: { bg: 'rgba(56,189,248,0.12)',  color: '#38bdf8', border: '#38bdf8' },
+        live:    { bg: 'rgba(167,139,250,0.12)', color: '#a78bfa', border: '#a78bfa' },
+    };
+    const s = styles[type] || styles['ok'];
+    badge.style.background   = s.bg;
+    badge.style.color        = s.color;
+    badge.style.borderColor  = s.border;
+    badge.textContent        = text;
+}
+
+function renderTwinChart(data) {
+    const ctx = document.getElementById('predictiveChart');
+    if (!ctx) return;
+
+    if (predictiveChartInstance) {
+        predictiveChartInstance.destroy();
+        predictiveChartInstance = null;
+    }
+
+    // Ordenar por saturación total descendente y tomar top 15 centros para legibilidad
+    const sorted = [...data]
+        .sort((a, b) => b.Saturacion_Total_Proyectada - a.Saturacion_Total_Proyectada)
+        .slice(0, 15);
+
+    const labels   = sorted.map(d => d.Centro);
+    const wip      = sorted.map(d => parseFloat(d.WIP_Actual_Horas) || 0);
+    const entrante = sorted.map(d => parseFloat(d.WIP_Entrante_Fase10_Horas) || 0);
+    const total    = sorted.map(d => parseFloat(d.Saturacion_Total_Proyectada) || 0);
+
+    // Color del borde: rojo si > CRITICO, amarillo si > ALERTA
+    const borderColors = total.map(t =>
+        t > TWIN_THRESHOLDS.CRITICO ? '#E30613' :
+        t > TWIN_THRESHOLDS.ALERTA  ? '#f59e0b' : '#38bdf8'
+    );
+
+    predictiveChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'WIP Actual (h)',
+                    data: wip,
+                    backgroundColor: 'rgba(56, 189, 248, 0.75)',
+                    borderColor:     'rgba(56, 189, 248, 1)',
+                    borderWidth: 1,
+                    borderRadius: { topLeft: 0, topRight: 0, bottomLeft: 4, bottomRight: 4 },
+                    stack: 'stack0',
+                },
+                {
+                    label: 'Entrante Fase 10 (h)',
+                    data: entrante,
+                    backgroundColor: sorted.map((d, i) =>
+                        total[i] > TWIN_THRESHOLDS.CRITICO
+                            ? 'rgba(227,6,19,0.80)'
+                            : 'rgba(245,158,11,0.80)'
+                    ),
+                    borderColor: borderColors,
+                    borderWidth: 1,
+                    borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 },
+                    stack: 'stack0',
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: {
+                    display: true,
+                    labels: { color: '#9ca3af', font: { size: 11 } }
+                },
+                tooltip: {
+                    backgroundColor: '#1a1a2e',
+                    titleColor: '#e2e8f0',
+                    bodyColor: '#9ca3af',
+                    borderColor: '#38bdf8',
+                    borderWidth: 1,
+                    callbacks: {
+                        afterBody: (items) => {
+                            const idx = items[0]?.dataIndex;
+                            if (idx !== undefined) {
+                                const t = total[idx];
+                                return [
+                                    `─────────────────`,
+                                    `Total Proyectado: ${t.toFixed(1)}h`,
+                                    t > TWIN_THRESHOLDS.CRITICO ? '🔴 ESTADO: CRÍTICO' :
+                                    t > TWIN_THRESHOLDS.ALERTA  ? '🟡 ESTADO: ALERTA' :
+                                                                   '🟢 ESTADO: NORMAL'
+                                ];
+                            }
+                            return [];
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { stacked: true, grid: { display: false }, ticks: { color: '#9ca3af', font: { size: 10 } } },
+                y: { stacked: true, grid: { color: '#2d2d35' }, ticks: { color: '#9ca3af' },
+                     title: { display: true, text: 'Horas de carga', color: '#9ca3af' } }
+            }
+        }
+    });
+}
+
+function renderTwinTable(data) {
+    const tbody = document.getElementById('twin-table-body');
+    if (!tbody) return;
+
+    const sorted = [...data].sort((a, b) => b.Saturacion_Total_Proyectada - a.Saturacion_Total_Proyectada);
+
+    tbody.innerHTML = sorted.map(row => {
+        const total  = parseFloat(row.Saturacion_Total_Proyectada) || 0;
+        const wip    = parseFloat(row.WIP_Actual_Horas)            || 0;
+        const entr   = parseFloat(row.WIP_Entrante_Fase10_Horas)   || 0;
+        const lotes  = parseInt(row.Lotes_En_Camino)               || 0;
+        const arts   = Array.isArray(row.Articulos_En_Camino)
+                            ? row.Articulos_En_Camino.slice(0, 5).join(', ')
+                            : (row.Articulos_En_Camino || '--');
+        const masArts = Array.isArray(row.Articulos_En_Camino) && row.Articulos_En_Camino.length > 5
+                            ? ` (+${row.Articulos_En_Camino.length - 5} más)` : '';
+
+        let estadoBadge, rowClass;
+        if (total > TWIN_THRESHOLDS.CRITICO) {
+            estadoBadge = '<span class="saturation-pill pill-high">🔴 CRÍTICO</span>';
+            rowClass    = 'style="background:rgba(227,6,19,0.06);"';
+        } else if (total > TWIN_THRESHOLDS.ALERTA) {
+            estadoBadge = '<span class="saturation-pill pill-mid">🟡 ALERTA</span>';
+            rowClass    = 'style="background:rgba(245,158,11,0.06);"';
+        } else {
+            estadoBadge = '<span class="saturation-pill pill-low">🟢 NORMAL</span>';
+            rowClass    = '';
+        }
+
+        return `
+            <tr ${rowClass}>
+                <td><strong>${row.Centro || '--'}</strong></td>
+                <td class="text-right">${wip.toFixed(1)}</td>
+                <td class="text-right" style="color:#f59e0b;">${entr.toFixed(1)}</td>
+                <td class="text-right" style="font-weight:600; color: ${total > TWIN_THRESHOLDS.CRITICO ? '#E30613' : total > TWIN_THRESHOLDS.ALERTA ? '#fbbf24' : '#4ade80'}">${total.toFixed(1)}</td>
+                <td class="text-right">${lotes}</td>
+                <td class="text-center">${estadoBadge}</td>
+                <td style="font-size:0.72rem; color:#9ca3af; max-width:200px; word-break:break-all;">
+                    ${arts}${masArts ? `<span style="color:#38bdf8;">${masArts}</span>` : ''}
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function renderTwinKPIs(data) {
+    const container = document.getElementById('twin-kpis');
+    if (!container) return;
+
+    const total     = data.reduce((s, r) => s + (parseFloat(r.Saturacion_Total_Proyectada) || 0), 0);
+    const wip       = data.reduce((s, r) => s + (parseFloat(r.WIP_Actual_Horas)            || 0), 0);
+    const entrante  = data.reduce((s, r) => s + (parseFloat(r.WIP_Entrante_Fase10_Horas)   || 0), 0);
+    const criticos  = data.filter(r => (parseFloat(r.Saturacion_Total_Proyectada) || 0) > TWIN_THRESHOLDS.CRITICO).length;
+    const alertas   = data.filter(r => {
+        const t = parseFloat(r.Saturacion_Total_Proyectada) || 0;
+        return t > TWIN_THRESHOLDS.ALERTA && t <= TWIN_THRESHOLDS.CRITICO;
+    }).length;
+    const totalLotes = data.reduce((s, r) => s + (parseInt(r.Lotes_En_Camino) || 0), 0);
+
+    container.innerHTML = `
+        <div class="stat-item">
+            <div class="stat-val" style="color:#38bdf8;">${wip.toFixed(0)}h</div>
+            <div class="stat-label">WIP Actual Total</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-val" style="color:#f59e0b;">${entrante.toFixed(0)}h</div>
+            <div class="stat-label">Carga Entrante F10</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-val" style="color: ${criticos > 0 ? '#E30613' : '#4ade80'};">${criticos}</div>
+            <div class="stat-label">Centros Críticos</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-val" style="color:#fbbf24;">${alertas}</div>
+            <div class="stat-label">Centros en Alerta</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-val" style="color:#a78bfa;">${totalLotes}</div>
+            <div class="stat-label">Lotes en Tránsito</div>
+        </div>
+    `;
+}

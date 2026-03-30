@@ -42,6 +42,9 @@
                 <button id="btn-new" class="nav-tab">Crear Escenario</button>
                 <button id="btn-manage" class="nav-tab">Gestionar</button>
                 <button id="btn-compare" class="nav-tab">Comparativa</button>
+                <button id="btn-twin" class="nav-tab" style="color: #38bdf8; border-left: 1px solid #333; margin-left: 4px;" title="Proyección predictiva de saturación en centros secundarios">
+                    🧠 Gemelo Digital
+                </button>
             </nav>
             <div class="window-controls">
                 <span class="close-btn" onclick="window.close()">×</span>
@@ -189,6 +192,91 @@
                         </thead>
                         <tbody id="table-body">
                             <!-- Rows -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </main>
+
+        <!-- =====================================================
+             PANEL GEMELO DIGITAL (oculto por defecto)
+             Aparece al pulsar "Gemelo Digital" en la nav.
+             ===================================================== -->
+        <main id="twin-panel" class="center-panel" style="display:none;">
+
+            <!-- Cabecera informativa -->
+            <div class="control-bar" style="justify-content: space-between; align-items: center;">
+                <div style="display:flex; gap:12px; align-items:center;">
+                    <span style="font-size:1.1rem; font-weight:700; color:#38bdf8;">🧠 Gemelo Digital Predictivo</span>
+                    <span id="twin-status-badge" style="font-size:0.7rem; padding:2px 8px; border-radius:12px; background:rgba(56,189,248,0.12); color:#38bdf8; border:1px solid #38bdf8;">Cargando…</span>
+                </div>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <span style="font-size:0.75rem; color:#9ca3af;">Horizonă saturație:</span>
+                    <select id="twin-horizon" class="dark-input" style="padding:0.2rem 0.5rem; font-size:0.75rem;">
+                        <option value="5">5 días</option>
+                        <option value="7" selected>7 días</option>
+                        <option value="14">14 días</option>
+                        <option value="21">21 días</option>
+                    </select>
+                    <button id="btn-refresh-twin" class="action-btn" style="font-size:0.75rem; padding:0.3rem 0.7rem;">🔄 Actualizar</button>
+                </div>
+            </div>
+
+            <!-- Grid: Gráfico Apilado + KPIs -->
+            <div class="dashboard-grid">
+
+                <!-- Stacked Bar Chart -->
+                <div class="dash-card chart-card">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                        <h4 style="margin:0; color:#e2e8f0;">Saturación Proyectada por Centro (h)</h4>
+                        <div style="display:flex; gap:12px; align-items:center; font-size:0.7rem;">
+                            <span style="display:flex; align-items:center; gap:4px;">
+                                <span style="width:10px;height:10px;border-radius:2px;background:#38bdf8;display:inline-block;"></span> WIP Actual
+                            </span>
+                            <span style="display:flex; align-items:center; gap:4px;">
+                                <span style="width:10px;height:10px;border-radius:2px;background:#f59e0b;display:inline-block;"></span> Entrante Fase 10
+                            </span>
+                            <span style="display:flex; align-items:center; gap:4px;">
+                                <span style="width:10px;height:10px;border-radius:2px;background:#E30613;display:inline-block;"></span> Crítico (&gt;100%)
+                            </span>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="predictiveChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- KPIs del Gemelo -->
+                <div class="dash-card summary-card">
+                    <h4 style="color:#e2e8f0;">Resumen Predictivo</h4>
+                    <div id="twin-kpis" class="summary-content">
+                        <p class="empty-msg" style="color:#9ca3af;">Sin datos</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabla Forward-Pass -->
+            <div class="dash-card table-card" style="margin-top:1rem;">
+                <div class="card-header">
+                    <h4 style="color:#e2e8f0;">🔗 Impacto Forward-Pass — Centros Secundarios</h4>
+                    <span style="font-size:0.72rem; color:#9ca3af;">Carga entrante desde órdenes en Fase 10 (Prensas / Fleje / Forma)</span>
+                </div>
+                <div class="table-scroll">
+                    <table id="twin-table">
+                        <thead>
+                            <tr>
+                                <th>Centro Secundario</th>
+                                <th class="text-right">WIP Actual (h)</th>
+                                <th class="text-right">Entrante F10 (h)</th>
+                                <th class="text-right">Total Proyectado (h)</th>
+                                <th class="text-right">Lotes en Camino</th>
+                                <th class="text-center">Estado</th>
+                                <th>Artículos en Camino</th>
+                            </tr>
+                        </thead>
+                        <tbody id="twin-table-body">
+                            <tr><td colspan="7" style="text-align:center; color:#9ca3af; padding:2rem;">Cargando proyección…</td></tr>
                         </tbody>
                     </table>
                 </div>
