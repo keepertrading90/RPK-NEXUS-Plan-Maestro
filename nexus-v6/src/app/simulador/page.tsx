@@ -12,6 +12,7 @@ import { EditModal } from '@/components/simulator/EditModal';
 import { SaveModal } from '@/components/simulator/SaveModal';
 import { ChangesPanel } from '@/components/simulator/ChangesPanel';
 import { CompareView } from '@/components/simulator/CompareView';
+import { PredictiveDashboard } from '@/components/simulator/PredictiveDashboard';
 
 export default function SimuladorPage() {
     const {
@@ -72,6 +73,9 @@ export default function SimuladorPage() {
 
                         {/* Chart */}
                         <SaturationChart />
+
+                        {/* Predictive Forward-Pass */}
+                        <PredictiveDashboard />
 
                         {/* Article Table */}
                         <ArticleTable />

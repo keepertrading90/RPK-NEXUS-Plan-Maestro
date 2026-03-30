@@ -4,9 +4,9 @@ from sqlalchemy.orm import sessionmaker, relationship
 import datetime
 import os
 
-# Usamos la misma base de datos que Nexus Hub pero vía SQLAlchemy para el Simulador
+# Usamos la base de datos transaccional estricta para el Simulador (Fase 3)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB_PATH = os.path.join(BASE_DIR, "db", "rpk_industrial.db")
+DB_PATH = os.path.join(BASE_DIR, "db", "nexus_transaccional.db")
 SQLALCHEMY_DATABASE_URL = f"sqlite:///{DB_PATH}"
 
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
@@ -15,7 +15,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 class Scenario(Base):
-    __tablename__ = "sim_scenarios" # Cambiamos nombre para evitar colisiones si las hubiera
+    __tablename__ = "escenarios_simulacion"
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True)
@@ -28,10 +28,10 @@ class Scenario(Base):
     details = relationship("ScenarioDetail", back_populates="scenario", cascade="all, delete-orphan")
 
 class ScenarioDetail(Base):
-    __tablename__ = "sim_scenario_details"
+    __tablename__ = "escenarios_simulacion_detalles"
 
     id = Column(Integer, primary_key=True, index=True)
-    scenario_id = Column(Integer, ForeignKey("sim_scenarios.id"))
+    scenario_id = Column(Integer, ForeignKey("escenarios_simulacion.id"))
     articulo = Column(String)
     centro = Column(String)
     oee_override = Column(Float, nullable=True)
@@ -45,10 +45,10 @@ class ScenarioDetail(Base):
     scenario = relationship("Scenario", back_populates="details")
 
 class ScenarioHistory(Base):
-    __tablename__ = "sim_scenario_history"
+    __tablename__ = "escenarios_simulacion_historial"
 
     id = Column(Integer, primary_key=True, index=True)
-    scenario_id = Column(Integer, ForeignKey("sim_scenarios.id"))
+    scenario_id = Column(Integer, ForeignKey("escenarios_simulacion.id"))
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)
     name = Column(String)
     changes_count = Column(Integer)

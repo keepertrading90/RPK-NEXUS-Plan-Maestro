@@ -1478,5 +1478,23 @@ async def get_albaranes_articulos(fecha_inicio: str = None, fecha_fin: str = Non
         return {"error": str(e)}
 
 
+# --- ENDPOINTS PREDICTIVOS (GEMELO DIGITAL FASE 2) ---
+
+from backend.analytics_core import proyectar_impacto_secundarios
+
+@app.get("/api/v1/predictive/saturation")
+async def get_predictive_saturation(dias_horizonte: int = 7):
+    """
+    Simulación predictiva 'carril rápido' que evalúa la recarga 
+    sobre los secundarios originada por las órdenes actuales de Prensas, Fleje... (Fase 10).
+    """
+    try:
+        data = proyectar_impacto_secundarios(dias_horizonte=dias_horizonte)
+        if hasattr(data, "get") and data.get("error"):
+            return {"status": "error", "message": data["error"]}
+        return {"status": "success", "data": data}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

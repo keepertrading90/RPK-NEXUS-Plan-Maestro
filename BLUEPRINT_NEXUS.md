@@ -22,7 +22,7 @@ Este documento es la **fuente de la verdad arquitectónica** para la IA y los de
 - **Framework Principal**: FastAPI + DuckDB (Analítico) + SQLite (Transaccional)
 - **Capa Agential**: Google Agent Development Kit (ADK) en puerto 8004.
 - **Motor IA activo**: Qwen 2.5-Coder 7B (via Ollama local).
-- **Fases IA**: Fase 1 (keyword SQL) → Fase 2 (Qwen SQL+narrativa) → Fase 3 (RAG + ADK Proxy + Streaming SSE).
+- **Gemelo Digital (Fase 3/4)**: Integración de predicción hacia adelante (Forward-Pass) con motor in-memory DuckDB y persistencia de escenarios `what-if` en SQLite `nexus_transaccional.db`.
 
 ---
 
@@ -30,8 +30,8 @@ Este documento es la **fuente de la verdad arquitectónica** para la IA y los de
 
 | Carril | Motor | Propósito |
 |--------|-------|-----------|
-| **Carril A (Transaccional)** | SQLite | Mutaciones de usuario, escenarios, configuraciones |
-| **Carril B (Analítico)** | DuckDB + Parquet | Lecturas masivas de Tiempos, Pedidos, Stock y Albaranes |
+| **Carril A (Transaccional)** | SQLite (`nexus_transaccional.db`) | Mutaciones de usuario, escenarios predictivos (`escenarios_simulacion`), configuraciones |
+| **Carril B (Analítico)** | DuckDB + Parquet | Lecturas masivas de Tiempos, Pedidos, Stock, Albaranes y Gemelo Digital Forward-Pass |
 | **Carril IA (Neuronal)** | Qwen 2.5 + RAG en memoria | Chat inteligente, SQL generado, respuesta narrativa |
 
 - **Python Portable**: Siempre `_SISTEMA\runtime_python\python.exe`
@@ -162,6 +162,7 @@ Usuario pregunta
 
 | Fecha | Versión | Cambios |
 |-------|---------|---------|
+| 30/03/2026 | **v6.0** | **Gemelo Digital Completado (Fase 3 & 4)**: Implementación de la `PredictiveDashboard` en frontend evidenciando cuellos de botella preventivos y flujo horario de OFs hacia secundarios. Transición del backend SQLite a `nexus_transaccional.db` aislando las tablas de escenarios de simulación y protegiendo el Carril A transaccional. |
 | 16/03/2026 | **v5.9.2** | **Rutas Maestras**: Integración de la hoja `BASE DE DATOS_1` como fuente única. Implementado filtrado vectorial de fases redundantes por cadencia idéntica. Adición de campos `FASE` y `UATC` al motor DuckDB. |
 | 12/03/2026 | v5.9.1 | **Informes de Automoción**: Implementación del motor `pdf_stock_advanced.py`. Análisis de capital inmovilizado, comparativas mensuales y Pareto de clientes con filtros profundos por fecha y artículo. |
 | 11/03/2026 | v5.9.0 | **Integración ADK Proxy**: Delegación de ejecución a Google ADK (puerto 8004). El backend Nexus ahora enruta peticiones SSE hacia el framework de agentes para evitar alucinaciones SQl monolíticas y dotar de acceso nativo DuckDB a *Quen_Arquitecto*. |
