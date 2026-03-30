@@ -30,7 +30,7 @@ if str(BASE_DIR) not in sys.path:
 from backend.db.consultor import traducir_a_sql, ejecutar_consulta, formatear_humanamente
 from backend.db import models_sim
 from backend.core import simulation_core
-from backend.analytics_core import get_cobertura_global
+from backend.analytics_core import get_twin  # v2.0: acceso al singleton del Gemelo Digital
 from backend.nexus_rag import nexus_rag       # FASE 3: Motor RAG
 from backend.nexus_memoria import nexus_memoria # FASE 4: Memoria conversacional
 from backend.nexus_alertas import nexus_alertas # FASE 4: Alertas proactivas
@@ -588,7 +588,7 @@ async def get_hub_stats():
         """, one=True)
         
         # 3. Cobertura (Analítica Core) - Mantenemos como está o delegamos
-        cobertura = get_cobertura_global()
+        cobertura = get_twin().get_cobertura_global()
         
         return {
             "stock": {
