@@ -162,6 +162,7 @@ Usuario pregunta
 
 | Fecha | Versión | Cambios |
 |-------|---------|---------|
+| 31/03/2026 | **v6.1.2** | **Cierre Fase 4.1 (Estabilidad & UX)**: Resolución de `ReferenceError: TWIN_THRESHOLDS` en frontend. Implementación de tooltips explicativos (nativos `title`) en cabeceras de tabla y KPIs del Gemelo Digital. Reactividad total con `oninput` en horizonte de días. |
 | 31/03/2026 | **v6.1.1** | **Escalado Dinámico Predictivo**: Umbrales de saturación (`TWIN_THRESHOLDS`) ahora vinculados al horizonte temporal. Exclusión del centro 799. Mejora de reactividad en el input de días (oninput). |
 | 31/03/2026 | **v6.1** | **Refinamiento Gemelo Digital (Fase 4.1)**: Mejora del algoritmo Forward-Pass con resiliencia ante discrepancias ID de máquinas y centros. Integración de la ingesta directa desde `carga_cabeceras.parquet` (Fase 10). Scroll infinito en visualización de centros y filtrado de ruido (centros 9xx, 724, 798). |
 | 30/03/2026 | **v6.0** | **Gemelo Digital Completado (Fase 3 & 4)**: Implementación de la `PredictiveDashboard` en frontend evidenciando cuellos de botella preventivos y flujo horario de OFs hacia secundarios. Transición del backend SQLite a `nexus_transaccional.db` aislando las tablas de escenarios de simulación y protegiendo el Carril A transaccional. |
