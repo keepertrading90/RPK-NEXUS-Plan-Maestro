@@ -169,11 +169,13 @@ class NexusDigitalTwin:
                 f.Articulo,
                 CAST(r.Centro AS VARCHAR) as Centro_Secundario,
                 CAST(r.Fase AS DOUBLE) as Fase_Secundaria,
-                -- Proyección: proporcional a las horas pendientes en F10
-                -- Si tenemos Piezas_Hora en la fase secundaria, usamos ratio; si no, fallback a horas entrada
+                -- Proyección (Regla de tres): 
+                -- Piezas totales a fabricar = f.Horas_Pendientes * r_f10.Piezas_Hora
+                -- Horas en secundario = Piezas totales / r.Piezas_Hora
+                -- Por tanto: Horas_Secundario = f.Horas_Pendientes * (r_f10.Piezas_Hora / r.Piezas_Hora)
                 COALESCE(
-                    f.Horas_Pendientes * (CAST(r.Piezas_Hora AS DOUBLE) / 
-                        NULLIF(CAST(r_f10.Piezas_Hora AS DOUBLE), 0)),
+                    f.Horas_Pendientes * (CAST(r_f10.Piezas_Hora AS DOUBLE) / 
+                        NULLIF(CAST(r.Piezas_Hora AS DOUBLE), 0)),
                     f.Horas_Pendientes
                 ) as Horas_Proyectadas_Secundario
             FROM ordenes_activas_f10 f

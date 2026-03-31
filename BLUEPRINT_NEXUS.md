@@ -162,6 +162,7 @@ Usuario pregunta
 
 | Fecha | Versión | Cambios |
 |-------|---------|---------|
+| 31/03/2026 | **v6.1.3** | **Hotfix Algoritmo Forward-Pass**: Corrección crítica en `analytics_core.py`. La ratio de cálculo de horas proyectadas estaba invertida (`PPM Secundario / PPM F10`), provocando cientos de horas ficticias en procesos rápidos. Se ha corregido la regla de tres a `Horas F10 * (PPM F10 / PPM Secundario)` garantizando un balance real de capacidad. |
 | 31/03/2026 | **v6.1.2** | **Cierre Fase 4.1 (Estabilidad & UX)**: Resolución de `ReferenceError: TWIN_THRESHOLDS` en frontend. Implementación de tooltips explicativos (nativos `title`) en cabeceras de tabla y KPIs del Gemelo Digital. Reactividad total con `oninput` en horizonte de días. |
 | 31/03/2026 | **v6.1.1** | **Escalado Dinámico Predictivo**: Umbrales de saturación (`TWIN_THRESHOLDS`) ahora vinculados al horizonte temporal. Exclusión del centro 799. Mejora de reactividad en el input de días (oninput). |
 | 31/03/2026 | **v6.1** | **Refinamiento Gemelo Digital (Fase 4.1)**: Mejora del algoritmo Forward-Pass con resiliencia ante discrepancias ID de máquinas y centros. Integración de la ingesta directa desde `carga_cabeceras.parquet` (Fase 10). Scroll infinito en visualización de centros y filtrado de ruido (centros 9xx, 724, 798). |
