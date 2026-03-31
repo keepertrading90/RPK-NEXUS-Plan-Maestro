@@ -266,13 +266,13 @@
                     <table id="twin-table">
                         <thead>
                             <tr>
-                                <th data-tooltip="Centro receptor de la carga proyectada desde procesos anteriores">Centro Secundario</th>
-                                <th class="text-right" data-tooltip="Carga física (en horas) que ya se encuentra estacionada en el centro">WIP Actual (h)</th>
-                                <th class="text-right" data-tooltip="Carga proyectada (en horas) proveniente de Fase 10 (Prensas/Forma)">Entrante F10 (h)</th>
-                                <th class="text-right" data-tooltip="Saturación total esperada (WIP + Carga Fase 10) en el horizonte seleccionado">Total Proyectado (h)</th>
-                                <th class="text-right" data-tooltip="Número de órdenes de fabricación (OFs) en tránsito hacia este centro">Lotes en Camino</th>
-                                <th class="text-center" data-tooltip="Semáforo de saturación predictora (Verde < 85h / Naranja < 112h / Rojo > 112h)">Estado</th>
-                                <th data-tooltip="Listado de referencias que componen la carga entrante proyectada">Artículos en Camino</th>
+                                <th title="Centro receptor de la carga proyectada desde procesos anteriores (Cabecera -> Secundario).">Centro Secundario</th>
+                                <th class="text-right" title="Capacidad (en horas) que ya se encuentra físicamente en el centro de trabajo según el último snapshot.">WIP Actual (h)</th>
+                                <th class="text-right" title="Carga de trabajo proyectada que llegará a este centro proveniente de las órdenes que hoy están en Fase 10.">Entrante F10 (h)</th>
+                                <th class="text-right" title="Saturación total proyectada (WIP + Entrante). Se compara contra la capacidad del horizonte seleccionado.">Total Proyectado (h)</th>
+                                <th class="text-right" title="Número de lotes u órdenes de fabricación distintas que componen la carga entrante.">Lotes en Camino</th>
+                                <th class="text-center" title="Estado de saturación: Rojo (>16h/día), Amarillo (>12h/día), Verde (Bajo riesgo).">Estado</th>
+                                <th title="Artículos principales con órdenes activas en Fase 10 que impactarán este centro.">Artículos en Camino</th>
                             </tr>
                         </thead>
                         <tbody id="twin-table-body">

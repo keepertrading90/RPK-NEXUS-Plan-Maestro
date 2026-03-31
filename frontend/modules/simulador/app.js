@@ -2249,12 +2249,6 @@ function renderTwinChart(data, thresholds) {
     const entrante = sorted.map(d => parseFloat(d.WIP_Entrante_Fase10_Horas) || 0);
     const total    = sorted.map(d => parseFloat(d.Saturacion_Total_Proyectada) || 0);
 
-    // Color del borde: rojo si > CRITICO, amarillo si > ALERTA
-    const borderColors = total.map(t =>
-        t > TWIN_THRESHOLDS.CRITICO ? '#E30613' :
-        t > TWIN_THRESHOLDS.ALERTA  ? '#f59e0b' : '#38bdf8'
-    );
-
     predictiveChartInstance = new Chart(ctx, {
         type: 'bar',
         data: {
@@ -2392,23 +2386,23 @@ function renderTwinKPIs(data, thresholds) {
     const ap = (thresholds.ALERTA).toFixed(0);
 
     container.innerHTML = `
-        <div class="stat-item" data-tooltip="Suma de horas de carga física ya presente en los centros secundarios seleccionados.">
+        <div class="stat-item" title="Suma de horas de carga física ya presente en los centros secundarios seleccionados.">
             <div class="stat-val" style="color:#38bdf8;">${wip.toFixed(0)}h</div>
             <div class="stat-label">WIP Actual Total</div>
         </div>
-        <div class="stat-item" data-tooltip="Total de horas proyectadas que se desplazarán desde procesos de cabecera a secundarios.">
+        <div class="stat-item" title="Total de horas proyectadas que se desplazarán desde procesos de cabecera a secundarios.">
             <div class="stat-val" style="color:#f59e0b;">${entrante.toFixed(0)}h</div>
             <div class="stat-label">Carga Entrante F10</div>
         </div>
-        <div class="stat-item" data-tooltip="Número de centros cuya saturación proyectada (WIP + Fase 10) supera las ${cp} horas.">
+        <div class="stat-item" title="Número de centros cuya saturación proyectada (WIP + Fase 10) supera las ${cp} horas.">
             <div class="stat-val" style="color: ${criticos > 0 ? '#E30613' : '#4ade80'};">${criticos}</div>
             <div class="stat-label">Centros Críticos</div>
         </div>
-        <div class="stat-item" data-tooltip="Número de centros cuya saturación se encuentra en la zona de riesgo (${ap} - ${cp} h).">
+        <div class="stat-item" title="Número de centros cuya saturación se encuentra en la zona de riesgo (${ap} - ${cp} h).">
             <div class="stat-val" style="color:#fbbf24;">${alertas}</div>
             <div class="stat-label">Centros en Alerta</div>
         </div>
-        <div class="stat-item" data-tooltip="Volumen total de órdenes de fabricación (lotes) que componen la carga entrante.">
+        <div class="stat-item" title="Volumen total de órdenes de fabricación (lotes) que componen la carga entrante.">
             <div class="stat-val" style="color:#a78bfa;">${totalLotes}</div>
             <div class="stat-label">Lotes en Tránsito</div>
         </div>
