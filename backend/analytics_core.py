@@ -227,7 +227,7 @@ class NexusDigitalTwin:
         FULL OUTER JOIN agregado_entrante a ON w.Centro = a.Centro_Secundario
         WHERE (COALESCE(w.Carga_WIP_Actual, 0) + COALESCE(a.Carga_Entrante_Predictiva, 0) > 0)
           AND (COALESCE(w.Centro, a.Centro_Secundario) NOT LIKE '9%')
-          AND (COALESCE(w.Centro, a.Centro_Secundario) NOT IN ('724', '798'))
+          AND (COALESCE(w.Centro, a.Centro_Secundario) NOT IN ('724', '798', '799'))
         ORDER BY Saturacion_Total_Proyectada DESC
         """
 
@@ -298,7 +298,10 @@ def proyectar_impacto_secundarios(
     """
     twin = get_twin()
     return twin.proyectar_impacto_secundarios(
-        simulacion_params={"dias_horizonte": dias_horizonte},
+        simulacion_params={
+            "dias_horizonte": dias_horizonte,
+            "horas_turno": 16
+        },
         df_fase10_override=df_fase10_override,
         df_centros_wip_override=df_centros_wip_override,
     )

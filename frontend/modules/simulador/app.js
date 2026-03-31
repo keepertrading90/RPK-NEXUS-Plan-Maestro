@@ -920,7 +920,7 @@ function setupEventListeners() {
 
     const twinHorizon = document.getElementById('twin-horizon');
     if (twinHorizon) {
-        twinHorizon.onchange = () => loadTwinDashboard();
+        twinHorizon.oninput = () => loadTwinDashboard();
     }
 
     const closeHandlers = document.querySelectorAll('.close, .close-manage');
@@ -2142,10 +2142,10 @@ document.addEventListener('DOMContentLoaded', () => {
 let predictiveChartInstance = null;
 let isTwinPanelActive = false;
 
-/** Instala variables CSS de soporte para el panel twin */
-const TWIN_THRESHOLDS = {
-    CRITICO: 120,   // > 120% saturacion total -> rojo
-    ALERTA: 80,     // > 80% -> amarillo
+/** Umbrales predictivos basados en carga por día (horas/día) */
+const TWIN_THRESHOLDS_BASE = {
+    CRITICO: 16,   // > 16h/día (saturación total de 2 turnos)
+    ALERTA: 12,    // > 12h/día
 };
 
 function toggleTwinPanel() {
@@ -2188,6 +2188,10 @@ async function loadTwinDashboard() {
         }
 
         const data = result.data || [];
+        const dynamicThresholds = {
+            CRITICO: TWIN_THRESHOLDS_BASE.CRITICO * horizon,
+            ALERTA: TWIN_THRESHOLDS_BASE.ALERTA * horizon
+        };
 
         if (data.length === 0) {
             setTwinBadge('warn', 'Sin órdenes activas');
@@ -2198,9 +2202,9 @@ async function loadTwinDashboard() {
             return;
         }
 
-        renderTwinChart(data);
-        renderTwinTable(data);
-        renderTwinKPIs(data);
+        renderTwinChart(data, dynamicThresholds);
+        renderTwinTable(data, dynamicThresholds);
+        renderTwinKPIs(data, dynamicThresholds);
         setTwinBadge('ok', `${data.length} centros proyectados`);
 
     } catch (err) {
@@ -2226,7 +2230,7 @@ function setTwinBadge(type, text) {
     badge.textContent        = text;
 }
 
-function renderTwinChart(data) {
+function renderTwinChart(data, thresholds) {
     const ctx = document.getElementById('predictiveChart');
     if (!ctx) return;
 
@@ -2269,11 +2273,14 @@ function renderTwinChart(data) {
                     label: 'Entrante Fase 10 (h)',
                     data: entrante,
                     backgroundColor: sorted.map((d, i) =>
-                        total[i] > TWIN_THRESHOLDS.CRITICO
+                        total[i] > thresholds.CRITICO
                             ? 'rgba(227,6,19,0.80)'
                             : 'rgba(245,158,11,0.80)'
                     ),
-                    borderColor: borderColors,
+                    borderColor: total.map(t =>
+                        t > thresholds.CRITICO ? '#E30613' :
+                        t > thresholds.ALERTA  ? '#f59e0b' : '#38bdf8'
+                    ),
                     borderWidth: 1,
                     borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 },
                     stack: 'stack0',
@@ -2303,8 +2310,8 @@ function renderTwinChart(data) {
                                 return [
                                     `─────────────────`,
                                     `Total Proyectado: ${t.toFixed(1)}h`,
-                                    t > TWIN_THRESHOLDS.CRITICO ? '🔴 ESTADO: CRÍTICO' :
-                                    t > TWIN_THRESHOLDS.ALERTA  ? '🟡 ESTADO: ALERTA' :
+                                    t > thresholds.CRITICO ? '🔴 ESTADO: CRÍTICO' :
+                                    t > thresholds.ALERTA  ? '🟡 ESTADO: ALERTA' :
                                                                    '🟢 ESTADO: NORMAL'
                                 ];
                             }
@@ -2322,7 +2329,7 @@ function renderTwinChart(data) {
     });
 }
 
-function renderTwinTable(data) {
+function renderTwinTable(data, thresholds) {
     const tbody = document.getElementById('twin-table-body');
     if (!tbody) return;
 
@@ -2340,10 +2347,10 @@ function renderTwinTable(data) {
                             ? ` (+${row.Articulos_En_Camino.length - 5} más)` : '';
 
         let estadoBadge, rowClass;
-        if (total > TWIN_THRESHOLDS.CRITICO) {
+        if (total > thresholds.CRITICO) {
             estadoBadge = '<span class="saturation-pill pill-high">🔴 CRÍTICO</span>';
             rowClass    = 'style="background:rgba(227,6,19,0.06);"';
-        } else if (total > TWIN_THRESHOLDS.ALERTA) {
+        } else if (total > thresholds.ALERTA) {
             estadoBadge = '<span class="saturation-pill pill-mid">🟡 ALERTA</span>';
             rowClass    = 'style="background:rgba(245,158,11,0.06);"';
         } else {
@@ -2356,7 +2363,7 @@ function renderTwinTable(data) {
                 <td><strong>${row.Centro || '--'}</strong></td>
                 <td class="text-right">${wip.toFixed(1)}</td>
                 <td class="text-right" style="color:#f59e0b;">${entr.toFixed(1)}</td>
-                <td class="text-right" style="font-weight:600; color: ${total > TWIN_THRESHOLDS.CRITICO ? '#E30613' : total > TWIN_THRESHOLDS.ALERTA ? '#fbbf24' : '#4ade80'}">${total.toFixed(1)}</td>
+                <td class="text-right" style="font-weight:600; color: ${total > thresholds.CRITICO ? '#E30613' : total > thresholds.ALERTA ? '#fbbf24' : '#4ade80'}">${total.toFixed(1)}</td>
                 <td class="text-right">${lotes}</td>
                 <td class="text-center">${estadoBadge}</td>
                 <td style="font-size:0.72rem; color:#9ca3af; max-width:200px; word-break:break-all;">
@@ -2367,19 +2374,22 @@ function renderTwinTable(data) {
     }).join('');
 }
 
-function renderTwinKPIs(data) {
+function renderTwinKPIs(data, thresholds) {
     const container = document.getElementById('twin-kpis');
     if (!container) return;
 
     const total     = data.reduce((s, r) => s + (parseFloat(r.Saturacion_Total_Proyectada) || 0), 0);
     const wip       = data.reduce((s, r) => s + (parseFloat(r.WIP_Actual_Horas)            || 0), 0);
     const entrante  = data.reduce((s, r) => s + (parseFloat(r.WIP_Entrante_Fase10_Horas)   || 0), 0);
-    const criticos  = data.filter(r => (parseFloat(r.Saturacion_Total_Proyectada) || 0) > TWIN_THRESHOLDS.CRITICO).length;
+    const criticos  = data.filter(r => (parseFloat(r.Saturacion_Total_Proyectada) || 0) > thresholds.CRITICO).length;
     const alertas   = data.filter(r => {
         const t = parseFloat(r.Saturacion_Total_Proyectada) || 0;
-        return t > TWIN_THRESHOLDS.ALERTA && t <= TWIN_THRESHOLDS.CRITICO;
+        return t > thresholds.ALERTA && t <= thresholds.CRITICO;
     }).length;
     const totalLotes = data.reduce((s, r) => s + (parseInt(r.Lotes_En_Camino) || 0), 0);
+
+    const cp = (thresholds.CRITICO).toFixed(0);
+    const ap = (thresholds.ALERTA).toFixed(0);
 
     container.innerHTML = `
         <div class="stat-item" data-tooltip="Suma de horas de carga física ya presente en los centros secundarios seleccionados.">
@@ -2390,11 +2400,11 @@ function renderTwinKPIs(data) {
             <div class="stat-val" style="color:#f59e0b;">${entrante.toFixed(0)}h</div>
             <div class="stat-label">Carga Entrante F10</div>
         </div>
-        <div class="stat-item" data-tooltip="Número de centros cuya saturación proyectada (WIP + Fase 10) supera las 120 horas.">
+        <div class="stat-item" data-tooltip="Número de centros cuya saturación proyectada (WIP + Fase 10) supera las ${cp} horas.">
             <div class="stat-val" style="color: ${criticos > 0 ? '#E30613' : '#4ade80'};">${criticos}</div>
             <div class="stat-label">Centros Críticos</div>
         </div>
-        <div class="stat-item" data-tooltip="Número de centros cuya saturación se encuentra en la zona de riesgo (80 - 120 h).">
+        <div class="stat-item" data-tooltip="Número de centros cuya saturación se encuentra en la zona de riesgo (${ap} - ${cp} h).">
             <div class="stat-val" style="color:#fbbf24;">${alertas}</div>
             <div class="stat-label">Centros en Alerta</div>
         </div>
