@@ -245,15 +245,15 @@ function renderSummary(summary, isFiltered) {
     const totalDemanda = summary.reduce((acc, current) => acc + (current['Volumen anual'] || 0), 0).toLocaleString();
 
     container.innerHTML = `
-        <div class="stat-item">
+        <div class="stat-item" data-tooltip="Carga de trabajo frente a capacidad disponible media calculada sobre los centros seleccionados.">
             <div class="stat-val ${avgSat > 85 ? 'rpk-red-text' : ''}">${avgSat}%</div>
             <div class="stat-label">Saturación Media ${isFiltered ? '(Sectores)' : ''}</div>
         </div>
-        <div class="stat-item">
+        <div class="stat-item" data-tooltip="Equivalente a personas a tiempo completo requeridas para cubrir la carga actual basándose en ratio personas/máquina.">
             <div class="stat-val" style="color: #4facfe;">${(summary.reduce((acc, c) => acc + (c.Horas_Hombre || 0), 0) / (currentData.meta.dias_laborales * 8)).toFixed(1)}</div>
             <div class="stat-label">Operarios Necesarios (FTE)</div>
         </div>
-        <div class="stat-item">
+        <div class="stat-item" data-tooltip="Volumen total de piezas (Producto Terminado) incluidas en el escenario actual.">
             <div class="stat-val">${totalDemanda}</div>
             <div class="stat-label">Demanda Total (pzs)</div>
         </div>
@@ -2382,23 +2382,23 @@ function renderTwinKPIs(data) {
     const totalLotes = data.reduce((s, r) => s + (parseInt(r.Lotes_En_Camino) || 0), 0);
 
     container.innerHTML = `
-        <div class="stat-item">
+        <div class="stat-item" data-tooltip="Suma de horas de carga física ya presente en los centros secundarios seleccionados.">
             <div class="stat-val" style="color:#38bdf8;">${wip.toFixed(0)}h</div>
             <div class="stat-label">WIP Actual Total</div>
         </div>
-        <div class="stat-item">
+        <div class="stat-item" data-tooltip="Total de horas proyectadas que se desplazarán desde procesos de cabecera a secundarios.">
             <div class="stat-val" style="color:#f59e0b;">${entrante.toFixed(0)}h</div>
             <div class="stat-label">Carga Entrante F10</div>
         </div>
-        <div class="stat-item">
+        <div class="stat-item" data-tooltip="Número de centros cuya saturación proyectada (WIP + Fase 10) supera las 120 horas.">
             <div class="stat-val" style="color: ${criticos > 0 ? '#E30613' : '#4ade80'};">${criticos}</div>
             <div class="stat-label">Centros Críticos</div>
         </div>
-        <div class="stat-item">
+        <div class="stat-item" data-tooltip="Número de centros cuya saturación se encuentra en la zona de riesgo (80 - 120 h).">
             <div class="stat-val" style="color:#fbbf24;">${alertas}</div>
             <div class="stat-label">Centros en Alerta</div>
         </div>
-        <div class="stat-item">
+        <div class="stat-item" data-tooltip="Volumen total de órdenes de fabricación (lotes) que componen la carga entrante.">
             <div class="stat-val" style="color:#a78bfa;">${totalLotes}</div>
             <div class="stat-label">Lotes en Tránsito</div>
         </div>

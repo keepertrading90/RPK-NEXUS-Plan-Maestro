@@ -42,7 +42,7 @@
                 <button id="btn-new" class="nav-tab">Crear Escenario</button>
                 <button id="btn-manage" class="nav-tab">Gestionar</button>
                 <button id="btn-compare" class="nav-tab">Comparativa</button>
-                <button id="btn-twin" class="nav-tab" style="color: #38bdf8; border-left: 1px solid #333; margin-left: 4px;" title="Proyección predictiva de saturación en centros secundarios">
+                <button id="btn-twin" class="nav-tab" style="border-left: 1px solid #333; margin-left: 4px;" title="Proyección predictiva de saturación en centros secundarios">
                     🧠 Gemelo Digital
                 </button>
             </nav>
@@ -212,7 +212,7 @@
                     <span id="twin-status-badge" style="font-size:0.7rem; padding:2px 8px; border-radius:12px; background:rgba(56,189,248,0.12); color:#38bdf8; border:1px solid #38bdf8;">Cargando…</span>
                 </div>
                 <div style="display:flex; gap:8px; align-items:center;">
-                    <span style="font-size:0.75rem; color:#9ca3af;">Horizonă saturație:</span>
+                    <span style="font-size:0.75rem; color:#9ca3af;">Horizonte saturación:</span>
                     <select id="twin-horizon" class="dark-input" style="padding:0.2rem 0.5rem; font-size:0.75rem;">
                         <option value="5">5 días</option>
                         <option value="7" selected>7 días</option>
@@ -266,13 +266,13 @@
                     <table id="twin-table">
                         <thead>
                             <tr>
-                                <th>Centro Secundario</th>
-                                <th class="text-right">WIP Actual (h)</th>
-                                <th class="text-right">Entrante F10 (h)</th>
-                                <th class="text-right">Total Proyectado (h)</th>
-                                <th class="text-right">Lotes en Camino</th>
-                                <th class="text-center">Estado</th>
-                                <th>Artículos en Camino</th>
+                                <th data-tooltip="Centro receptor de la carga proyectada desde procesos anteriores">Centro Secundario</th>
+                                <th class="text-right" data-tooltip="Carga física (en horas) que ya se encuentra estacionada en el centro">WIP Actual (h)</th>
+                                <th class="text-right" data-tooltip="Carga proyectada (en horas) proveniente de Fase 10 (Prensas/Forma)">Entrante F10 (h)</th>
+                                <th class="text-right" data-tooltip="Saturación total esperada (WIP + Carga Fase 10) en el horizonte seleccionado">Total Proyectado (h)</th>
+                                <th class="text-right" data-tooltip="Número de órdenes de fabricación (OFs) en tránsito hacia este centro">Lotes en Camino</th>
+                                <th class="text-center" data-tooltip="Semáforo de saturación predictora (Verde < 85h / Naranja < 112h / Rojo > 112h)">Estado</th>
+                                <th data-tooltip="Listado de referencias que componen la carga entrante proyectada">Artículos en Camino</th>
                             </tr>
                         </thead>
                         <tbody id="twin-table-body">

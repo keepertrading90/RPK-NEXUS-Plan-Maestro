@@ -1,4 +1,4 @@
-﻿/* =========================================
+/* =========================================
    STYLE RESET & VARIABLES (RPK THEME)
    ========================================= */
 :root {
@@ -209,6 +209,35 @@ body {
     color: white;
     background: var(--rpk-red);
     border-bottom-color: var(--rpk-red-dark);
+}
+
+/* Gemelo Digital: tab activo en cyan en vez de rojo */
+#btn-twin.active {
+    background: rgba(56, 189, 248, 0.18) !important;
+    color: #38bdf8 !important;
+    border-bottom-color: #38bdf8 !important;
+    border-bottom-width: 3px;
+}
+
+#btn-twin:hover {
+    color: #38bdf8;
+}
+
+/* Panel Gemelo Digital: layout columna + fondo con acento azul */
+#twin-panel {
+    flex-direction: column;
+    background: radial-gradient(circle at top center, rgba(56, 189, 248, 0.04), transparent 600px);
+}
+
+/* Glow sutil en las tarjetas del gemelo cuando hay estado critico */
+.twin-card-critico {
+    border-color: rgba(227, 6, 19, 0.5) !important;
+    box-shadow: 0 0 12px rgba(227, 6, 19, 0.15) !important;
+}
+
+.twin-card-alerta {
+    border-color: rgba(245, 158, 11, 0.5) !important;
+    box-shadow: 0 0 12px rgba(245, 158, 11, 0.1) !important;
 }
 
 /* =========================================
@@ -788,12 +817,12 @@ th {
 }
 
 /* Header Tooltips */
-th[data-tooltip] {
+[data-tooltip] {
     position: relative;
     cursor: help;
 }
 
-th[data-tooltip]::after {
+[data-tooltip]::after {
     content: attr(data-tooltip);
     position: absolute;
     top: 100%;
@@ -1595,4 +1624,40 @@ body.compare-mode .main-layout {
 
 .rec-dot.yellow {
     background: #f5a623;
+}
+
+/* =========================================
+   SCROLL SYSTEM - TABLES
+   ========================================= */
+.table-scroll {
+    max-height: 480px;
+    overflow-y: auto;
+    overflow-x: auto;
+    border-radius: 0 0 12px 12px;
+}
+
+.table-scroll::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.table-scroll::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.table-scroll::-webkit-scrollbar-thumb {
+    background: var(--rpk-red);
+    border-radius: 10px;
+}
+
+.table-scroll::-webkit-scrollbar-thumb:hover {
+    background: #ff1a1a;
+}
+
+/* Fix table header for scroll */
+.table-scroll table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--dark-surface);
 }

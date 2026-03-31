@@ -162,6 +162,7 @@ Usuario pregunta
 
 | Fecha | Versión | Cambios |
 |-------|---------|---------|
+| 31/03/2026 | **v6.1** | **Refinamiento Gemelo Digital (Fase 4.1)**: Mejora del algoritmo Forward-Pass con resiliencia ante discrepancias ID de máquinas y centros. Integración de la ingesta directa desde `carga_cabeceras.parquet` (Fase 10). Scroll infinito en visualización de centros y filtrado de ruido (centros 9xx, 724, 798). |
 | 30/03/2026 | **v6.0** | **Gemelo Digital Completado (Fase 3 & 4)**: Implementación de la `PredictiveDashboard` en frontend evidenciando cuellos de botella preventivos y flujo horario de OFs hacia secundarios. Transición del backend SQLite a `nexus_transaccional.db` aislando las tablas de escenarios de simulación y protegiendo el Carril A transaccional. |
 | 16/03/2026 | **v5.9.2** | **Rutas Maestras**: Integración de la hoja `BASE DE DATOS_1` como fuente única. Implementado filtrado vectorial de fases redundantes por cadencia idéntica. Adición de campos `FASE` y `UATC` al motor DuckDB. |
 | 12/03/2026 | v5.9.1 | **Informes de Automoción**: Implementación del motor `pdf_stock_advanced.py`. Análisis de capital inmovilizado, comparativas mensuales y Pareto de clientes con filtros profundos por fecha y artículo. |
