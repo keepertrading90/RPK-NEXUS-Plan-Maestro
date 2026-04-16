@@ -250,8 +250,8 @@ def process_file_fase10(file_path: Path) -> pd.DataFrame:
         df_clean['Centro_Cabecera'] = clean_series(df_clean['Centro_Cabecera'])
         df_clean['OF'] = clean_series(df_clean['OF'])
 
-        # Filtrar filas con horas = 0 (OFs ya terminadas en la secuencia)
-        df_clean = df_clean[df_clean['Horas_Necesarias'] > 0].copy()
+        # Filtrar filas con horas = 0 Y cantidad = 0 (OFs ya terminadas en la secuencia)
+        df_clean = df_clean[(df_clean['Horas_Necesarias'] > 0) | (df_clean['Cantidad'] > 0)].copy()
 
     return df_clean
 

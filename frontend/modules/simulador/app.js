@@ -2158,12 +2158,14 @@ function toggleTwinPanel() {
     if (isTwinPanelActive) {
         if (twinPanel) twinPanel.style.display = 'flex';
         if (mainPanel) mainPanel.style.display = 'none';
+        document.querySelectorAll('.side-panel').forEach(p => p.style.display = 'none');
         document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
         document.getElementById('btn-twin')?.classList.add('active');
         loadTwinDashboard();
     } else {
         if (twinPanel) twinPanel.style.display = 'none';
         if (mainPanel) mainPanel.style.display = 'flex';
+        document.querySelectorAll('.side-panel').forEach(p => p.style.display = 'flex');
         updateNavItemActive(currentScenarioId);
     }
 }
@@ -2343,24 +2345,26 @@ function renderTwinTable(data, thresholds) {
         let estadoBadge, rowClass;
         if (total > thresholds.CRITICO) {
             estadoBadge = '<span class="saturation-pill pill-high">🔴 CRÍTICO</span>';
-            rowClass    = 'style="background:rgba(227,6,19,0.06);"';
+            rowClass    = 'background:rgba(227,6,19,0.06); cursor: pointer;';
         } else if (total > thresholds.ALERTA) {
             estadoBadge = '<span class="saturation-pill pill-mid">🟡 ALERTA</span>';
-            rowClass    = 'style="background:rgba(245,158,11,0.06);"';
+            rowClass    = 'background:rgba(245,158,11,0.06); cursor: pointer;';
         } else {
             estadoBadge = '<span class="saturation-pill pill-low">🟢 NORMAL</span>';
-            rowClass    = '';
+            rowClass    = 'cursor: pointer;';
         }
 
+        const encodedOfs = row.Detalles_OFs ? encodeURIComponent(JSON.stringify(row.Detalles_OFs)) : '[]';
+
         return `
-            <tr ${rowClass}>
-                <td><strong>${row.Centro || '--'}</strong></td>
-                <td class="text-right">${wip.toFixed(1)}</td>
-                <td class="text-right" style="color:#f59e0b;">${entr.toFixed(1)}</td>
-                <td class="text-right" style="font-weight:600; color: ${total > thresholds.CRITICO ? '#E30613' : total > thresholds.ALERTA ? '#fbbf24' : '#4ade80'}">${total.toFixed(1)}</td>
+            <tr style="${rowClass}" onclick="openTwinDrillDown('${row.Centro}', '${encodedOfs}')">
+                <td style="font-weight:600; color:#e2e8f0;">${row.Centro}</td>
+                <td class="text-right">${wip.toLocaleString()}h</td>
+                <td class="text-right" style="color:#f59e0b;">+${entr.toLocaleString()}h</td>
+                <td class="text-right" style="font-weight:700;">${total.toLocaleString()}h</td>
                 <td class="text-right">${lotes}</td>
                 <td class="text-center">${estadoBadge}</td>
-                <td style="font-size:0.72rem; color:#9ca3af; max-width:200px; word-break:break-all;">
+                <td style="font-size:0.8rem;" title="${Array.isArray(row.Articulos_En_Camino) ? row.Articulos_En_Camino.join(', ') : arts}">
                     ${arts}${masArts ? `<span style="color:#38bdf8;">${masArts}</span>` : ''}
                 </td>
             </tr>

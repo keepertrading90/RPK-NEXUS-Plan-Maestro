@@ -17,6 +17,8 @@ warnings.filterwarnings('ignore', category=UserWarning)
 BASE_DIR = Path(__file__).resolve().parent.parent / "backend"
 NETWORK_IP = r"\\145.3.0.54\ofimatica\Supply Chain\PLAN PRODUCCION"
 
+ONEDRIVE = Path(r"C:\Users\ismael.rodriguez\OneDrive - RPK S COOP")
+
 SOURCES = {
     "pedidos": Path(NETWORK_IP) / "Listado Pedidos Ventas",
     "albaranes": Path(NETWORK_IP) / "Consulta Listado de Albaranes",
@@ -24,11 +26,14 @@ SOURCES = {
     "carga_centros": Path(NETWORK_IP) / "List Avance Obra-Centro y Operacion",
     "maestro_local": BASE_DIR / "db" / "MAESTRO FLEJE.xlsx",
     "rutas_ingenieria": None,
-    "fase10_prensas": Path(r"C:\Users\ismael.rodriguez\OneDrive - RPK S COOP\UATC Forma-Fleje\PLANIFICACION\CARGA PRENSAS 2.xlsx"),
-    "fase10_flej": Path(r"C:\Users\ismael.rodriguez\OneDrive - RPK S COOP\UATC Forma-Fleje\PLANIFICACION\CARGA FLEJ 2.xlsx"),
-    "fase10_forma": Path(r"C:\Users\ismael.rodriguez\OneDrive - RPK S COOP\UATC Forma-Fleje\PLANIFICACION\CARGA FORMA 2.xlsx"),
-    "fase10_compresion": Path(r"C:\Users\ismael.rodriguez\OneDrive - RPK S COOP\UATC Forma-Fleje\PLANIFICACION\CARGA MAQUINA COMPRESION.xlsx"),
-    "fase10_retenes": Path(r"C:\Users\ismael.rodriguez\OneDrive - RPK S COOP\UATC Forma-Fleje\PLANIFICACION\CARGA MAQUINA RETENES.xlsx"),
+    # --- FASE 10: Centros Cabecera (OneDrive - 2 carpetas distintas) ---
+    # UATC Forma-Fleje (MESA UATC Tarragona > PLANIFICACION)
+    "fase10_fleje":       ONEDRIVE / "UATC Forma-Fleje" / "PLANIFICACION" / "CARGA FLEJE 2.xlsm",
+    "fase10_prensas":     ONEDRIVE / "UATC Forma-Fleje" / "PLANIFICACION" / "CARGA PRENSAS 2.xlsm",
+    # UATC RETENES-COMPRESION (MESA UATC Tarragona > UATC RETENES-COMPRESION)
+    "fase10_forma":       ONEDRIVE / "MESA UATC Tarragona - UATC RETENES-COMPRESION" / "CARGA FORMA 2.xlsm",
+    "fase10_compresion":  ONEDRIVE / "MESA UATC Tarragona - UATC RETENES-COMPRESION" / "CARGA MAQUINA COMPRESION.xlsx",
+    "fase10_retenes":     ONEDRIVE / "MESA UATC Tarragona - UATC RETENES-COMPRESION" / "CARGA MAQUINA RETENES.xlsx",
     "objetivos_stock": Path(NETWORK_IP) / "PANEL" / "_PROYECTOS" / "DASHBOARD_STOCK" / "backend" / "OBJETIVOS_STOCK.xlsx",
     "ocupacion": Path(NETWORK_IP) / "Listado ubicaciones vacias"
 }
@@ -420,15 +425,15 @@ def run_etl():
     except Exception as e:
         logging.warning(f"Error Ocupacion: {e}")
 
-    # 7. Fase 10 (Gemelo Digital)
+    # 7. Fase 10: Cabeceras (Gemelo Digital - fuente de verdad para la proyección)
     try:
         from etl_cabeceras_fase10 import build_carga_consolidada
         fase10_paths = [
-            SOURCES["fase10_prensas"], 
-            SOURCES["fase10_flej"], 
-            SOURCES["fase10_forma"], 
-            SOURCES["fase10_compresion"], 
-            SOURCES["fase10_retenes"]
+            SOURCES["fase10_fleje"],
+            SOURCES["fase10_prensas"],
+            SOURCES["fase10_forma"],
+            SOURCES["fase10_compresion"],
+            SOURCES["fase10_retenes"],
         ]
         logging.info("Procesando Consolidado de Cabeceras Fase 10 (Gemelo Digital)...")
         p = build_carga_consolidada(fase10_paths, LAKE_DIR)

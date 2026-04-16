@@ -201,7 +201,8 @@ class NexusDigitalTwin:
                 Centro_Secundario,
                 SUM(COALESCE(Horas_Proyectadas_Secundario, 0)) as Carga_Entrante_Predictiva,
                 COUNT(DISTINCT OF) as Cantidad_Lotes_Entrantes,
-                LIST(DISTINCT Articulo) as Articulos_En_Camino
+                LIST(DISTINCT Articulo) as Articulos_En_Camino,
+                LIST({'of': OF, 'horas': ROUND(COALESCE(Horas_Proyectadas_Secundario, 0), 2), 'articulo': Articulo}) as Detalles_OFs
             FROM impacto_rutas
             GROUP BY Centro_Secundario
         ),
@@ -224,7 +225,8 @@ class NexusDigitalTwin:
                 COALESCE(w.Carga_WIP_Actual, 0) + COALESCE(a.Carga_Entrante_Predictiva, 0)
             , 2) as Saturacion_Total_Proyectada,
             COALESCE(a.Cantidad_Lotes_Entrantes, 0) as Lotes_En_Camino,
-            COALESCE(a.Articulos_En_Camino, []) as Articulos_En_Camino
+            COALESCE(a.Articulos_En_Camino, []) as Articulos_En_Camino,
+            COALESCE(a.Detalles_OFs, []) as Detalles_OFs
         FROM wip_actual w
         FULL OUTER JOIN agregado_entrante a ON w.Centro = a.Centro_Secundario
         WHERE (COALESCE(w.Carga_WIP_Actual, 0) + COALESCE(a.Carga_Entrante_Predictiva, 0) > 0)
@@ -240,6 +242,10 @@ class NexusDigitalTwin:
             if "Articulos_En_Camino" in df.columns:
                 df["Articulos_En_Camino"] = df["Articulos_En_Camino"].apply(
                     lambda x: list(x) if hasattr(x, '__iter__') and not isinstance(x, str) else []
+                )
+            if "Detalles_OFs" in df.columns:
+                df["Detalles_OFs"] = df["Detalles_OFs"].apply(
+                    lambda x: [dict(i) for i in x] if hasattr(x, '__iter__') and not isinstance(x, str) else []
                 )
             resultado = df.to_dict(orient="records")
             logger.info(f"Proyección v2.1 completada: {len(resultado)} centros secundarios impactados.")
