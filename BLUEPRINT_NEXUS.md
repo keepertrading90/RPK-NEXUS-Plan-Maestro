@@ -1,4 +1,4 @@
-# BLUEPRINT_NEXUS v5.9.3 (Fase 3.2 Rutas Maestras — Marzo 2026)
+# BLUEPRINT_NEXUS v6.6 (Rediseño UI Visual-First — Abril 2026)
 Este documento es la **fuente de la verdad arquitectónica** para la IA y los desarrolladores humanos de acuerdo al protocolo de Industria 5.0.
 
 ---
@@ -9,12 +9,18 @@ Este documento es la **fuente de la verdad arquitectónica** para la IA y los de
 - **Filtros Avanzados (Simulator)**:
     - **Fase 10 Priorizada**: Al cargar, el simulador selecciona automáticamente solo los centros de Fase 10 para una vista de cabecera limpia.
     - **Filtro UATC**: Nuevo desplegable en la barra de control para filtrar por Unidad de Atribución de Coste.
-- **Columnas Maestras**:
-    - `Articulo`: ID del producto.
-    - `Centro`: Código de máquina (ej: 142).
-    - `Fase`: Fase de fabricación (distribución de 10 en adelante).
-    - `UATC`: Unidad de Atribución de Coste.
-    - `Piezas_Hora`: Cadencia nominal para cálculos de saturación.
+
+---
+
+## SIMULADOR DINÁMICO N-MÁQUINAS (Novedad v6.5)
+- **Arquitectura DAG**: Basado en un Grafo Dirigido Acíclico (Directed Acyclic Graph). Las máquinas se conectan vía `feedsInto`.
+- **Motor Topológico**: Procesamiento en orden topológico (Algoritmo de Kahn) garantizando que ninguna máquina procese material antes de que su upstream termine el lote de transferencia.
+- **Zero-Latency Client**: El motor de simulación (`simulator.engine.ts`) corre íntegramente en el navegador del usuario (Next.js).
+- **UI Interactiva v6.6**:
+    - **Navegación por Iconos**: Header minimalista con barra de acciones (Añadir, Guardar, Historial, KPIs).
+    - **Drawer Lateral (Right Slide)**: La configuración de máquinas y resultados se desplaza a un panel lateral emergente para liberar el área de trabajo.
+    - **Diagrama de Flujo Navegable**: Los nodos del DAG son clicables y actúan como lanzadores de configuración.
+    - **Maximized Visuals**: Área central reservada íntegramente para Diagrama y Gantt en alta resolución.
 
 ---
 
@@ -87,9 +93,13 @@ Usuario pregunta
 
 ## ESTRUCTURA DEL BACKEND (Python 3.12 / FastAPI)
 
-### Motor ETL — Data Lakehouse
+### Motor ETL — Data Lakehouse (V5.6 Fix)
 - **ETL Diario**: `scripts/etl_nexus_master.py` — Escribe Parquets particionados `year=/month=/`.
-- **ETL Histórico**: `scripts/etl_historical_master.py`, `scripts/etl_historical_ocupacion.py` — Ingesta masiva.
+- **ETL Histórico**: `scripts/etl_historical_master.py` — Ingesta masiva con sobrescritura automática.
+- **Protocolo de Idempotencia (CRÍTICO)**: 
+    - Los Parquets se nombran como `[modulo]_[YYYYMMDD].parquet`. 
+    - **PROHIBIDO** incluir timestamps de hora (`HHMMSS`) en el nombre, ya que DuckDB encadena todos los ficheros del directorio y esto causaría duplicación sistemática de totales.
+    - Cada re-ejecución del ETL para una fecha dada DEBE sobrescribir el fichero anterior.
 - **Analytics DB**: `backend/db/rpk_analytical.duckdb` — Contiene vistas mapeadas con `union_by_name`.
 - **Dominios**: existencias, carga_centros, carga_detalle, pedidos, albaranes, maestro_fleje, ocupacion.
 
@@ -134,14 +144,14 @@ Usuario pregunta
 
 ### Módulos (`frontend/modules/`)
 
-| Módulo | Ruta Servida | Archivo HTML |
-|--------|-------------|--------------|
+| Módulo | Ruta Servida | Archivo HTML / Framework |
+|--------|-------------|--------------------------|
 | Portal Central | `/portal/` | `frontend/ui/index.html` |
 | Stock y Almacén | `/mod/stock/` | `frontend/modules/stock/index.html` |
 | Carga y Tiempos | `/mod/tiempos/` | `frontend/modules/tiempos/index.html` |
 | Pedidos de Venta | `/mod/pedidos/` | `frontend/modules/pedidos/index.html` |
 | Albaranes | `/mod/albaranes/` | `frontend/modules/albaranes/index.html` |
-| Simulador | `/mod/simulador/` | `frontend/modules/simulador/index.html` |
+| **Simulador Dinámico** | `/mod/simulador/` | **Next.js (App Router) v6.5** |
 | **Central IA** | `/mod/ia_agents/` | `frontend/modules/ia_agents/index.html` |
 | Ocupación | `/mod/ocupacion/` | `frontend/modules/ocupacion/index.html` |
 
@@ -162,6 +172,8 @@ Usuario pregunta
 
 | Fecha | Versión | Cambios |
 |-------|---------|---------|
+| 16/04/2026 | **v6.6** | **Rediseño UI "Visual-First"**: Maximización de Diagrama y Gantt (100% ancho). Implementación de Drawer lateral para parámetros. Header minimalista con iconos + tooltips. Interactividad total en nodos SVG para lanzamiendo de config. |
+| 16/04/2026 | **v6.5** | **Simulador Dinámico N-Máquinas**: Refactorización completa de la arquitectura reactiva. Motor DAG (Kahn Algorithm) en frontend. Soporte para lotes de transferencia encadenados. Drag & Drop con dnd-kit. Visualización SVG de flujo y Gantt multi-fila (máx 10 máquinas). |
 | 31/03/2026 | **v6.1.3** | **Hotfix Algoritmo Forward-Pass**: Corrección crítica en `analytics_core.py`. La ratio de cálculo de horas proyectadas estaba invertida (`PPM Secundario / PPM F10`), provocando cientos de horas ficticias en procesos rápidos. Se ha corregido la regla de tres a `Horas F10 * (PPM F10 / PPM Secundario)` garantizando un balance real de capacidad. |
 | 31/03/2026 | **v6.1.2** | **Cierre Fase 4.1 (Estabilidad & UX)**: Resolución de `ReferenceError: TWIN_THRESHOLDS` en frontend. Implementación de tooltips explicativos (nativos `title`) en cabeceras de tabla y KPIs del Gemelo Digital. Reactividad total con `oninput` en horizonte de días. |
 | 31/03/2026 | **v6.1.1** | **Escalado Dinámico Predictivo**: Umbrales de saturación (`TWIN_THRESHOLDS`) ahora vinculados al horizonte temporal. Exclusión del centro 799. Mejora de reactividad en el input de días (oninput). |

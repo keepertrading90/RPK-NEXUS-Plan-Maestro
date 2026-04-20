@@ -71,8 +71,10 @@ def store_parquet(df: pd.DataFrame, target_path: Path):
 
     partition_path = target_path / f"year={year}" / f"month={month}"
     partition_path.mkdir(parents=True, exist_ok=True)
-    # Give a unique name based on the date of the data and a timestamp
-    final_file = partition_path / f"{target_path.stem}_{first_date.replace('-','')}_{datetime.now().strftime('%H%M%S')}.parquet"
+    # FIX: Nombre basado SOLO en la fecha (YYYYMMDD), sin timestamp de hora.
+    # Re-ejecutar el ETL para el mismo dia SOBRESCRIBE el fichero existente,
+    # en lugar de crear uno nuevo duplicado (causa del error sistematico de duplicacion).
+    final_file = partition_path / f"{target_path.stem}_{first_date.replace('-','')}.parquet"
 
     # Cast object columns using PyArrow rule
     for col in df.columns:
