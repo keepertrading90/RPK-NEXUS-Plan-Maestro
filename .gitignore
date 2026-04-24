@@ -2,7 +2,12 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.db
+*.duckdb
+*.parquet
 *.log
 .env
 .vscode/
 node_modules/
+backend/data_lake/
+scratch/
+OLD/

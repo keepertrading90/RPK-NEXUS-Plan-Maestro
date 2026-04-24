@@ -172,6 +172,7 @@ Usuario pregunta
 
 | Fecha | Versión | Cambios |
 |-------|---------|---------|
+| 24/04/2026 | **v6.6.1** | **Limpieza Estructural (Zero-Noise)**: Refactorización del árbol de directorios aislando todos los scripts experimentales, de debug y de fases superadas en el directorio `OLD/`. Se estandarizó `INICIAR_NEXUS.bat` como única puerta de entrada válida y se depuró el directorio de scripts para dejar exclusivamente los archivos de producción. |
 | 16/04/2026 | **v6.6** | **Rediseño UI "Visual-First"**: Maximización de Diagrama y Gantt (100% ancho). Implementación de Drawer lateral para parámetros. Header minimalista con iconos + tooltips. Interactividad total en nodos SVG para lanzamiendo de config. |
 | 16/04/2026 | **v6.5** | **Simulador Dinámico N-Máquinas**: Refactorización completa de la arquitectura reactiva. Motor DAG (Kahn Algorithm) en frontend. Soporte para lotes de transferencia encadenados. Drag & Drop con dnd-kit. Visualización SVG de flujo y Gantt multi-fila (máx 10 máquinas). |
 | 31/03/2026 | **v6.1.3** | **Hotfix Algoritmo Forward-Pass**: Corrección crítica en `analytics_core.py`. La ratio de cálculo de horas proyectadas estaba invertida (`PPM Secundario / PPM F10`), provocando cientos de horas ficticias en procesos rápidos. Se ha corregido la regla de tres a `Horas F10 * (PPM F10 / PPM Secundario)` garantizando un balance real de capacidad. |
@@ -191,6 +192,13 @@ Usuario pregunta
 | Mar 2026 | v5.5 | Integración nativa del Simulador V1 Classic. |
 | Feb 2026 | v5.5 RC | Motor ETL Data Lakehouse, UI Glassmorphism, PDF Reports. |
 | Ene 2026 | v5.0 | Base FastAPI + DuckDB. |
+
+## ESTRUCTURA DE ARCHIVO (`OLD`)
+Para mantener el paradigma "Zero-Noise", cualquier archivo que no sea indispensable para el `INICIAR_NEXUS.bat` actual, ha sido movido al directorio `/OLD`. 
+- **Contiene**: Versiones previas del simulador, scripts temporales (ej. `tmp_*.py`, `debug_*.py`), y excels de análisis ad-hoc.
+- **Regla**: El motor ETL de producción y el backend de FastAPI NUNCA deben leer dependencias ni datos desde la carpeta `OLD`.
+
+---
 
 ## TOPOLOGÍA DE DESPLIEGUE (AGENTES)
 - **Backend Core**: Servidor Nexus port 8000.
