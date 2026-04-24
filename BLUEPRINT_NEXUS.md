@@ -1,11 +1,118 @@
-# BLUEPRINT_NEXUS v5.9.1 (Fase 3.1 Reportes Avanzados de Automoción — Marzo 2026)
+# BLUEPRINT_NEXUS v6.6.2 (Refinamiento N-Máquinas — Abril 2026)
 Este documento es la **fuente de la verdad arquitectónica** para la IA y los desarrolladores humanos de acuerdo al protocolo de Industria 5.0.
+
+---
+
+## DIAGRAMA DE ARQUITECTURA GLOBAL (Industria 5.0)
+
+```mermaid
+graph TD
+    User([Usuario / Planner]) --> UI
+
+    subgraph Frontend [Capa Frontend Híbrida]
+        UI[Vanilla JS App Shell] --> MOD[Módulos Vanilla: Stock, Tiempos, Pedidos]
+        UI --> SIM[Next.js App Router: Simulador V6.6.2]
+    end
+    
+    Frontend --> |API REST / SSE| API
+    
+    subgraph Backend [Capa Backend Core]
+        API[FastAPI Server] --> ETL[ETL Pipeline: Calamine & Pandas]
+    end
+    
+    subgraph Datos [Capa de Datos Dual]
+        ETL --> |Lectura Red RPK| EXCEL[(Excel Network Y:)]
+        ETL --> |Escribe Parquet| DL[Data Lakehouse Parquet]
+        API --> |Lecturas Masivas| DUCK[(DuckDB - Carril Analítico B)]
+        DL -.-> DUCK
+        API <--> |Mutaciones/Config| SQLITE[(SQLite - Carril Transaccional A)]
+        DL -.-> DUCK
+    end
+    
+    subgraph IA [Capa Agencial IA]
+        API --> |Proxy SSE Puerto 8004| ADK[Google ADK Server]
+        ADK <--> |Consultas SQL RAG| DUCK
+        ADK <--> OLLAMA((Ollama Qwen 2.5-Coder))
+    end
+```
+
+## STACK TECNOLÓGICO Y COMPONENTES
+
+1. **Frontend (Visual-First & Zero-Latency)**
+   - **Vanilla JS + HTML/CSS**: Usado para el esqueleto central (App Shell) y vistas tabulares puras (Stock, Albaranes, Tiempos). Muy rápido y sin peso de compilación.
+   - **Next.js (App Router)**: Usado de manera exclusiva para el `Simulador Dinámico N-Máquinas`. Permite gestionar estados complejos (Zustand), drag and drop, y un motor topológico en el cliente.
+   - **Estilizado**: Paleta de colores nativa RPK, Dark Mode Glassmorphism, TailwindCSS (solo en módulos Next.js).
+
+2. **Backend (Alta Concurrencia y API)**
+   - **Python 3.12 (Entorno Portable)**: El proyecto corre totalmente aislado de las variables de entorno de Windows usando `_SISTEMA\runtime_python\python.exe`.
+   - **FastAPI**: Sirve la API REST de manera asíncrona, genera PDFs y enruta el tráfico Streaming SSE.
+
+3. **Datos (Lakehouse Híbrido)**
+   - **DuckDB + Parquet (Carril B - Analítico)**: Reemplaza a las bases de datos monolíticas. El ETL transforma Excels pesados en Parquet y DuckDB ejecuta consultas masivas con tiempos de respuesta en milisegundos (Zero-Copy).
+   - **SQLite (Carril A - Transaccional)**: Almacena únicamente el estado "mutable" del usuario (ej: ajustes manuales en el simulador, escenarios "what-if").
+   - **Python-Calamine**: Librería ultrarrápida (Rust) para parsear Excels mastodónticos de la red corporativa (`Y:`), reemplazando a `openpyxl`.
+
+4. **IA y Agentes (Fase 3)**
+   - **Google ADK**: El servidor actúa como intermediario para orquestar la IA.
+   - **Ollama + Qwen 2.5-Coder 7B**: LLM ligero y brutalmente eficiente en código/SQL que se ejecuta en la máquina local (Privacidad absoluta).
+
+## ESTRUCTURA DE CARPETAS DEL PROYECTO
+
+```text
+📦 Plan Maestro RPK NEXUS
+ ┣ 📂 .agent/                # Configuración de agentes y sistema MCP
+ ┣ 📂 _SISTEMA/              # Python runtime portable
+ ┣ 📂 backend/               # Servidor FastAPI
+ ┃ ┣ 📂 api/                 # Endpoints REST
+ ┃ ┣ 📂 core/                # Configuración central
+ ┃ ┣ 📂 data_lake/           # Parquets generados por el ETL
+ ┃ ┣ 📂 db/                  # Vistas, SQLite transaccional y DuckDB
+ ┃ ┣ 📜 server_nexus.py      # Entry point del servidor web
+ ┃ ┗ 📜 nexus_*.py           # Subsistemas IA (RAG, Memoria, Alertas)
+ ┣ 📂 config/                # Configuraciones ambientales (.env)
+ ┣ 📂 docs/                  # Documentación Markdown (excepto Blueprint)
+ ┣ 📂 frontend/              # Archivos UI del usuario
+ ┃ ┣ 📂 assets/              # Estilos (style_nexus.css) y fuentes
+ ┃ ┣ 📂 modules/             # Aplicaciones encapsuladas (Simulador, Stock...)
+ ┃ ┗ 📂 ui/                  # Componentes base (App Shell, index.html)
+ ┣ 📂 OLD/                   # ARCHIVO: Histórico de scripts superados y logs (No cargar)
+ ┣ 📂 scripts/               # Scripts de automatización y operacionales
+ ┃ ┣ 📜 etl_nexus_master.py  # Motor principal de sincronización de Red a Lakehouse
+ ┃ ┗ 📜 ops_sync.py          # Script de sincronización a GitHub
+ ┣ 📜 BLUEPRINT_NEXUS.md     # Fuente única de verdad (ESTE DOCUMENTO)
+ ┗ 📜 INICIAR_NEXUS.bat      # Arrancador principal y único válido del entorno
+```
+
+---
+
+## MOTOR ANALÍTICO - RUTAS MAESTRAS (Novedad v5.9.3)
+- **Fuente Única**: Hoja `BASE DE DATOS_1` en `MAESTRO FLEJE.xlsx`.
+- **Lógica de Filtrado de Cadencias**: Se omiten centros de trabajo que tengan exactamente la misma cadencia (`prod_horaria`) que la fase anterior dentro del mismo artículo, salvo que sea la fase inicial (Fase 10).
+- **Filtros Avanzados (Simulator)**:
+    - **Fase 10 Priorizada**: Al cargar, el simulador selecciona automáticamente solo los centros de Fase 10 para una vista de cabecera limpia.
+    - **Filtro UATC**: Nuevo desplegable en la barra de control para filtrar por Unidad de Atribución de Coste.
+
+---
+
+## SIMULADOR DINÁMICO N-MÁQUINAS (Novedad v6.5)
+- **Arquitectura DAG**: Basado en un Grafo Dirigido Acíclico (Directed Acyclic Graph). Las máquinas se conectan vía `feedsInto`.
+- **Motor Topológico**: Procesamiento en orden topológico (Algoritmo de Kahn) garantizando que ninguna máquina procese material antes de que su upstream termine el lote de transferencia.
+- **Regla del Lote Impar (Odd Lot Rule)**: Si el lote total no es múltiplo exacto del lote de transferencia, el remanente se agrupa siempre en la última operación para evitar micro-lotes ineficientes.
+- **Validación de Cabecera**: Las máquinas secundarias deben esperar a recibir, como mínimo, una cantidad igual a su propio lote de transferencia (o al de la cabecera si es mayor) antes de iniciar ciclo, salvo en el último lote de la serie.
+- **Zero-Latency Client**: El motor de simulación (`simulator.engine.ts`) corre íntegramente en el navegador del usuario (Next.js).
+- **UI Interactiva v6.6.2**:
+    - **Navegación por Iconos**: Header minimalista con barra de acciones (Añadir, Guardar, Historial, KPIs).
+    - **Drawer Lateral (Right Slide)**: La configuración de máquinas y resultados se desplaza a un panel lateral emergente para liberar el área de trabajo.
+    - **Diagrama de Flujo Navegable**: Los nodos del DAG son clicables y actúan como lanzadores de configuración.
+    - **Maximized Visuals**: Área central reservada íntegramente para Diagrama y Gantt en alta resolución.
+
+---
 
 ## ARQUITECTURA HÍBRIDA NEXUS-IA
 - **Framework Principal**: FastAPI + DuckDB (Analítico) + SQLite (Transaccional)
 - **Capa Agential**: Google Agent Development Kit (ADK) en puerto 8004.
 - **Motor IA activo**: Qwen 2.5-Coder 7B (via Ollama local).
-- **Fases IA**: Fase 1 (keyword SQL) → Fase 2 (Qwen SQL+narrativa) → Fase 3 (RAG + ADK Proxy + Streaming SSE).
+- **Gemelo Digital (Fase 3/4)**: Integración de predicción hacia adelante (Forward-Pass) con motor in-memory DuckDB y persistencia de escenarios `what-if` en SQLite `nexus_transaccional.db`.
 
 ---
 
@@ -13,8 +120,8 @@ Este documento es la **fuente de la verdad arquitectónica** para la IA y los de
 
 | Carril | Motor | Propósito |
 |--------|-------|-----------|
-| **Carril A (Transaccional)** | SQLite | Mutaciones de usuario, escenarios, configuraciones |
-| **Carril B (Analítico)** | DuckDB + Parquet | Lecturas masivas de Tiempos, Pedidos, Stock y Albaranes |
+| **Carril A (Transaccional)** | SQLite (`nexus_transaccional.db`) | Mutaciones de usuario, escenarios predictivos (`escenarios_simulacion`), configuraciones |
+| **Carril B (Analítico)** | DuckDB + Parquet | Lecturas masivas de Tiempos, Pedidos, Stock, Albaranes y Gemelo Digital Forward-Pass |
 | **Carril IA (Neuronal)** | Qwen 2.5 + RAG en memoria | Chat inteligente, SQL generado, respuesta narrativa |
 
 - **Python Portable**: Siempre `_SISTEMA\runtime_python\python.exe`
@@ -70,9 +177,13 @@ Usuario pregunta
 
 ## ESTRUCTURA DEL BACKEND (Python 3.12 / FastAPI)
 
-### Motor ETL — Data Lakehouse
+### Motor ETL — Data Lakehouse (V5.6 Fix)
 - **ETL Diario**: `scripts/etl_nexus_master.py` — Escribe Parquets particionados `year=/month=/`.
-- **ETL Histórico**: `scripts/etl_historical_master.py`, `scripts/etl_historical_ocupacion.py` — Ingesta masiva.
+- **ETL Histórico**: `scripts/etl_historical_master.py` — Ingesta masiva con sobrescritura automática.
+- **Protocolo de Idempotencia (CRÍTICO)**: 
+    - Los Parquets se nombran como `[modulo]_[YYYYMMDD].parquet`. 
+    - **PROHIBIDO** incluir timestamps de hora (`HHMMSS`) en el nombre, ya que DuckDB encadena todos los ficheros del directorio y esto causaría duplicación sistemática de totales.
+    - Cada re-ejecución del ETL para una fecha dada DEBE sobrescribir el fichero anterior.
 - **Analytics DB**: `backend/db/rpk_analytical.duckdb` — Contiene vistas mapeadas con `union_by_name`.
 - **Dominios**: existencias, carga_centros, carga_detalle, pedidos, albaranes, maestro_fleje, ocupacion.
 
@@ -117,14 +228,14 @@ Usuario pregunta
 
 ### Módulos (`frontend/modules/`)
 
-| Módulo | Ruta Servida | Archivo HTML |
-|--------|-------------|--------------|
+| Módulo | Ruta Servida | Archivo HTML / Framework |
+|--------|-------------|--------------------------|
 | Portal Central | `/portal/` | `frontend/ui/index.html` |
 | Stock y Almacén | `/mod/stock/` | `frontend/modules/stock/index.html` |
 | Carga y Tiempos | `/mod/tiempos/` | `frontend/modules/tiempos/index.html` |
 | Pedidos de Venta | `/mod/pedidos/` | `frontend/modules/pedidos/index.html` |
 | Albaranes | `/mod/albaranes/` | `frontend/modules/albaranes/index.html` |
-| Simulador | `/mod/simulador/` | `frontend/modules/simulador/index.html` |
+| **Simulador Dinámico** | `/mod/simulador/` | **Next.js (App Router) v6.5** |
 | **Central IA** | `/mod/ia_agents/` | `frontend/modules/ia_agents/index.html` |
 | Ocupación | `/mod/ocupacion/` | `frontend/modules/ocupacion/index.html` |
 
@@ -145,7 +256,17 @@ Usuario pregunta
 
 | Fecha | Versión | Cambios |
 |-------|---------|---------|
-| 12/03/2026 | **v5.9.1** | **Informes de Automoción**: Implementación del motor `pdf_stock_advanced.py`. Análisis de capital inmovilizado, comparativas mensuales y Pareto de clientes con filtros profundos por fecha y artículo. |
+| 24/04/2026 | **v6.6.2** | **Refinamiento N-Máquinas**: Implementación de la "Regla del Lote Impar" y validación de cabecera. Mejora de la lógica de espera en máquinas secundarias para procesar lotes de transferencia completos. |
+| 24/04/2026 | **v6.6.1** | **Limpieza Estructural (Zero-Noise)**: Refactorización del árbol de directorios aislando todos los scripts experimentales, de debug y de fases superadas en el directorio `OLD/`. Se estandarizó `INICIAR_NEXUS.bat` como única puerta de entrada válida y se depuró el directorio de scripts para dejar exclusivamente los archivos de producción. |
+| 16/04/2026 | **v6.6** | **Rediseño UI "Visual-First"**: Maximización de Diagrama y Gantt (100% ancho). Implementación de Drawer lateral para parámetros. Header minimalista con iconos + tooltips. Interactividad total en nodos SVG para lanzamiendo de config. |
+| 16/04/2026 | **v6.5** | **Simulador Dinámico N-Máquinas**: Refactorización completa de la arquitectura reactiva. Motor DAG (Kahn Algorithm) en frontend. Soporte para lotes de transferencia encadenados. Drag & Drop con dnd-kit. Visualización SVG de flujo y Gantt multi-fila (máx 10 máquinas). |
+| 31/03/2026 | **v6.1.3** | **Hotfix Algoritmo Forward-Pass**: Corrección crítica en `analytics_core.py`. La ratio de cálculo de horas proyectadas estaba invertida (`PPM Secundario / PPM F10`), provocando cientos de horas ficticias en procesos rápidos. Se ha corregido la regla de tres a `Horas F10 * (PPM F10 / PPM Secundario)` garantizando un balance real de capacidad. |
+| 31/03/2026 | **v6.1.2** | **Cierre Fase 4.1 (Estabilidad & UX)**: Resolución de `ReferenceError: TWIN_THRESHOLDS` en frontend. Implementación de tooltips explicativos (nativos `title`) en cabeceras de tabla y KPIs del Gemelo Digital. Reactividad total con `oninput` en horizonte de días. |
+| 31/03/2026 | **v6.1.1** | **Escalado Dinámico Predictivo**: Umbrales de saturación (`TWIN_THRESHOLDS`) ahora vinculados al horizonte temporal. Exclusión del centro 799. Mejora de reactividad en el input de días (oninput). |
+| 31/03/2026 | **v6.1** | **Refinamiento Gemelo Digital (Fase 4.1)**: Mejora del algoritmo Forward-Pass con resiliencia ante discrepancias ID de máquinas y centros. Integración de la ingesta directa desde `carga_cabeceras.parquet` (Fase 10). Scroll infinito en visualización de centros y filtrado de ruido (centros 9xx, 724, 798). |
+| 30/03/2026 | **v6.0** | **Gemelo Digital Completado (Fase 3 & 4)**: Implementación de la `PredictiveDashboard` en frontend evidenciando cuellos de botella preventivos y flujo horario de OFs hacia secundarios. Transición del backend SQLite a `nexus_transaccional.db` aislando las tablas de escenarios de simulación y protegiendo el Carril A transaccional. |
+| 16/03/2026 | **v5.9.2** | **Rutas Maestras**: Integración de la hoja `BASE DE DATOS_1` como fuente única. Implementado filtrado vectorial de fases redundantes por cadencia idéntica. Adición de campos `FASE` y `UATC` al motor DuckDB. |
+| 12/03/2026 | v5.9.1 | **Informes de Automoción**: Implementación del motor `pdf_stock_advanced.py`. Análisis de capital inmovilizado, comparativas mensuales y Pareto de clientes con filtros profundos por fecha y artículo. |
 | 11/03/2026 | v5.9.0 | **Integración ADK Proxy**: Delegación de ejecución a Google ADK (puerto 8004). El backend Nexus ahora enruta peticiones SSE hacia el framework de agentes para evitar alucinaciones SQl monolíticas y dotar de acceso nativo DuckDB a *Quen_Arquitecto*. |
 | 10/03/2026 | v5.8.0 | Motor IA Fase 3: RAG en memoria (`nexus_rag.py`), Memoria conversacional multi-turno (`nexus_memoria.py`), Alertas proactivas (`nexus_alertas.py`), Streaming SSE token a token (`/api/v1/chat/stream`), Auto-generación de artifacts MD, corrección de consultas DuckDB (Centro 142 → maestro_fleje). |
 | 10/03/2026 | v5.7.5 | Fase 2 IA: Qwen2.5-Coder genera SQL + narrativa en una llamada. Prewarm del modelo al arrancar. `nexus_rag.py` indexa artículos y centros. |
@@ -157,9 +278,16 @@ Usuario pregunta
 | Feb 2026 | v5.5 RC | Motor ETL Data Lakehouse, UI Glassmorphism, PDF Reports. |
 | Ene 2026 | v5.0 | Base FastAPI + DuckDB. |
 
+---
+
+## ESTRUCTURA DE ARCHIVO (`OLD`)
+Para mantener el paradigma "Zero-Noise", cualquier archivo que no sea indispensable para el `INICIAR_NEXUS.bat` actual, ha sido movido al directorio `/OLD`. 
+- **Contiene**: Versiones previas del simulador, scripts temporales (ej. `tmp_*.py`, `debug_*.py`), y excels de análisis ad-hoc.
+- **Regla**: El motor ETL de producción y el backend de FastAPI NUNCA deben leer dependencias ni datos desde la carpeta `OLD`.
+
+---
+
 ## TOPOLOGÍA DE DESPLIEGUE (AGENTES)
 - **Backend Core**: Servidor Nexus port 8000.
 - **Agent Server**: Google Agent Development Kit (ADK) port 8004.
 - **LLM Engine**: Ollama (localhost:11434).
-
-
