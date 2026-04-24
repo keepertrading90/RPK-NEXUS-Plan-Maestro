@@ -3,6 +3,87 @@ Este documento es la **fuente de la verdad arquitectónica** para la IA y los de
 
 ---
 
+## DIAGRAMA DE ARQUITECTURA GLOBAL (Industria 5.0)
+
+```mermaid
+graph TD
+    User([Usuario / Planner]) --> UI
+
+    subgraph Frontend [Capa Frontend Híbrida]
+        UI[Vanilla JS App Shell] --> MOD[Módulos Vanilla: Stock, Tiempos, Pedidos]
+        UI --> SIM[Next.js App Router: Simulador V6.6]
+    end
+    
+    Frontend --> |API REST / SSE| API
+    
+    subgraph Backend [Capa Backend Core]
+        API[FastAPI Server] --> ETL[ETL Pipeline: Calamine & Pandas]
+    end
+    
+    subgraph Datos [Capa de Datos Dual]
+        ETL --> |Lectura Red RPK| EXCEL[(Excel Network Y:)]
+        ETL --> |Escribe Parquet| DL[Data Lakehouse Parquet]
+        API --> |Lecturas Masivas| DUCK[(DuckDB - Carril Analítico B)]
+        DL -.-> DUCK
+        API <--> |Mutaciones/Config| SQLITE[(SQLite - Carril Transaccional A)]
+    end
+    
+    subgraph IA [Capa Agencial IA]
+        API --> |Proxy SSE Puerto 8004| ADK[Google ADK Server]
+        ADK <--> |Consultas SQL RAG| DUCK
+        ADK <--> OLLAMA((Ollama Qwen 2.5-Coder))
+    end
+```
+
+## STACK TECNOLÓGICO Y COMPONENTES
+
+1. **Frontend (Visual-First & Zero-Latency)**
+   - **Vanilla JS + HTML/CSS**: Usado para el esqueleto central (App Shell) y vistas tabulares puras (Stock, Albaranes, Tiempos). Muy rápido y sin peso de compilación.
+   - **Next.js (App Router)**: Usado de manera exclusiva para el `Simulador Dinámico N-Máquinas`. Permite gestionar estados complejos (Zustand), drag and drop, y un motor topológico en el cliente.
+   - **Estilizado**: Paleta de colores nativa RPK, Dark Mode Glassmorphism, TailwindCSS (solo en módulos Next.js).
+
+2. **Backend (Alta Concurrencia y API)**
+   - **Python 3.12 (Entorno Portable)**: El proyecto corre totalmente aislado de las variables de entorno de Windows usando `_SISTEMA\runtime_python\python.exe`.
+   - **FastAPI**: Sirve la API REST de manera asíncrona, genera PDFs y enruta el tráfico Streaming SSE.
+
+3. **Datos (Lakehouse Híbrido)**
+   - **DuckDB + Parquet (Carril B - Analítico)**: Reemplaza a las bases de datos monolíticas. El ETL transforma Excels pesados en Parquet y DuckDB ejecuta consultas masivas con tiempos de respuesta en milisegundos (Zero-Copy).
+   - **SQLite (Carril A - Transaccional)**: Almacena únicamente el estado "mutable" del usuario (ej: ajustes manuales en el simulador, escenarios "what-if").
+   - **Python-Calamine**: Librería ultrarrápida (Rust) para parsear Excels mastodónticos de la red corporativa (`Y:`), reemplazando a `openpyxl`.
+
+4. **IA y Agentes (Fase 3)**
+   - **Google ADK**: El servidor actúa como intermediario para orquestar la IA.
+   - **Ollama + Qwen 2.5-Coder 7B**: LLM ligero y brutalmente eficiente en código/SQL que se ejecuta en la máquina local (Privacidad absoluta).
+
+## ESTRUCTURA DE CARPETAS DEL PROYECTO
+
+```text
+📦 Plan Maestro RPK NEXUS
+ ┣ 📂 .agent/                # Configuración de agentes y sistema MCP
+ ┣ 📂 _SISTEMA/              # Python runtime portable
+ ┣ 📂 backend/               # Servidor FastAPI
+ ┃ ┣ 📂 api/                 # Endpoints REST
+ ┃ ┣ 📂 core/                # Configuración central
+ ┃ ┣ 📂 data_lake/           # Parquets generados por el ETL
+ ┃ ┣ 📂 db/                  # Vistas, SQLite transaccional y DuckDB
+ ┃ ┣ 📜 server_nexus.py      # Entry point del servidor web
+ ┃ ┗ 📜 nexus_*.py           # Subsistemas IA (RAG, Memoria, Alertas)
+ ┣ 📂 config/                # Configuraciones ambientales (.env)
+ ┣ 📂 docs/                  # Documentación Markdown (excepto Blueprint)
+ ┣ 📂 frontend/              # Archivos UI del usuario
+ ┃ ┣ 📂 assets/              # Estilos (style_nexus.css) y fuentes
+ ┃ ┣ 📂 modules/             # Aplicaciones encapsuladas (Simulador, Stock...)
+ ┃ ┗ 📂 ui/                  # Componentes base (App Shell, index.html)
+ ┣ 📂 OLD/                   # ARCHIVO: Histórico de scripts superados y logs (No cargar)
+ ┣ 📂 scripts/               # Scripts de automatización y operacionales
+ ┃ ┣ 📜 etl_nexus_master.py  # Motor principal de sincronización de Red a Lakehouse
+ ┃ ┗ 📜 ops_sync.py          # Script de sincronización a GitHub
+ ┣ 📜 BLUEPRINT_NEXUS.md     # Fuente única de verdad (ESTE DOCUMENTO)
+ ┗ 📜 INICIAR_NEXUS.bat      # Arrancador principal y único válido del entorno
+```
+
+---
+
 ## MOTOR ANALÍTICO - RUTAS MAESTRAS (Novedad v5.9.3)
 - **Fuente Única**: Hoja `BASE DE DATOS_1` en `MAESTRO FLEJE.xlsx`.
 - **Lógica de Filtrado de Cadencias**: Se omiten centros de trabajo que tengan exactamente la misma cadencia (`prod_horaria`) que la fase anterior dentro del mismo artículo, salvo que sea la fase inicial (Fase 10).
